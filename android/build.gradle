@@ -7,7 +7,8 @@ buildscript {
         ndkVersion = "26.1.10909125"
 
         // 🔴 IMPORTANT: Kotlin 2.x breaks RN
-        kotlinVersion = "1.8.22"
+        // 🔴 IMPORTANT: Kotlin 2.x breaks RN
+        kotlinVersion = "1.9.24"
     }
     repositories {
         google()
