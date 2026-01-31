@@ -1,30 +1,4 @@
-<<<<<<< HEAD
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
 
-const ProfileScreen = () => {
-    return (
-        <View style={styles.container}>
-            <Text style={styles.text}>Profile Screen</Text>
-        </View>
-    );
-};
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-    },
-    text: {
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-});
-
-export default ProfileScreen;
-=======
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -134,7 +108,7 @@ const ProfileScreen = () => {
           '2FA adds an extra layer of security to your account',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Enable', onPress: () => {} },
+            { text: 'Enable', onPress: () => { } },
           ]
         );
         break;
@@ -338,9 +312,9 @@ const ProfileScreen = () => {
                 'Are you sure you want to logout?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Logout', 
-                    style: 'destructive', 
+                  {
+                    text: 'Logout',
+                    style: 'destructive',
                     onPress: () => {
                       navigation.navigate('Login' as never);
                     }
@@ -575,4 +549,4 @@ const styles = StyleSheet.create({
 });
 
 export default ProfileScreen;
->>>>>>> e4185fa (updated login)
+
