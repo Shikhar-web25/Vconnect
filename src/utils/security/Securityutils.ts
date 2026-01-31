@@ -14,15 +14,15 @@ export const SecurityConfig = {
   // Encryption settings
   ENCRYPTION_ENABLED: true,
   ENCRYPTION_ALGORITHM: 'AES-256',
-  
+
   // Session settings
   SESSION_TIMEOUT: 30 * 60 * 1000, // 30 minutes
   MAX_LOGIN_ATTEMPTS: 5,
-  
+
   // Biometric settings
   BIOMETRIC_ENABLED: true,
   FALLBACK_TO_PASSCODE: true,
-  
+
   // 2FA settings
   TWO_FACTOR_REQUIRED: false,
   TWO_FACTOR_METHOD: 'SMS', // SMS, EMAIL, or AUTHENTICATOR
@@ -39,7 +39,7 @@ export const isDeviceSecure = async (): Promise<boolean> => {
     // const isRooted = await DeviceInfo.isRooted();
     // const isJailbroken = await DeviceInfo.isJailbroken();
     // return !isRooted && !isJailbroken;
-    
+
     return true; // Assuming secure for now
   } catch (error) {
     console.error('Error checking device security:', error);
@@ -57,7 +57,7 @@ export const validatePasswordStrength = (password: string): {
 } => {
   let strength: 'weak' | 'medium' | 'strong' = 'weak';
   let message = '';
-  
+
   // Check minimum length
   if (password.length < 8) {
     return {
@@ -66,15 +66,15 @@ export const validatePasswordStrength = (password: string): {
       message: 'Password must be at least 8 characters long',
     };
   }
-  
+
   // Check for uppercase, lowercase, numbers, and special characters
   const hasUpperCase = /[A-Z]/.test(password);
   const hasLowerCase = /[a-z]/.test(password);
   const hasNumbers = /\d/.test(password);
   const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-  
+
   const criteriaCount = [hasUpperCase, hasLowerCase, hasNumbers, hasSpecialChar].filter(Boolean).length;
-  
+
   if (criteriaCount < 2) {
     strength = 'weak';
     message = 'Password is weak. Include uppercase, lowercase, numbers, and special characters.';
@@ -85,7 +85,7 @@ export const validatePasswordStrength = (password: string): {
     strength = 'strong';
     message = 'Password is strong!';
   }
-  
+
   return {
     isValid: criteriaCount >= 2,
     strength,
@@ -130,7 +130,7 @@ export const isBiometricAvailable = async (): Promise<{
     // const ReactNativeBiometrics = require('react-native-biometrics');
     // const rnBiometrics = new ReactNativeBiometrics();
     // const { available, biometryType } = await rnBiometrics.isSensorAvailable();
-    
+
     return {
       available: true,
       biometryType: Platform.OS === 'ios' ? 'FaceID' : 'Biometrics',
@@ -156,7 +156,7 @@ export const authenticateWithBiometrics = async (): Promise<boolean> => {
     //   promptMessage: 'Confirm your identity',
     // });
     // return success;
-    
+
     // For now, show an alert
     return new Promise((resolve) => {
       Alert.alert(
@@ -183,7 +183,7 @@ export const securelyStoreData = async (key: string, value: string): Promise<boo
     // This is a placeholder - implement with react-native-encrypted-storage
     // const EncryptedStorage = require('react-native-encrypted-storage');
     // await EncryptedStorage.setItem(key, value);
-    
+
     console.log(`Securely stored data for key: ${key}`);
     return true;
   } catch (error) {
@@ -201,7 +201,7 @@ export const retrieveSecureData = async (key: string): Promise<string | null> =>
     // const EncryptedStorage = require('react-native-encrypted-storage');
     // const value = await EncryptedStorage.getItem(key);
     // return value;
-    
+
     console.log(`Retrieved secure data for key: ${key}`);
     return null;
   } catch (error) {
@@ -218,7 +218,7 @@ export const deleteSecureData = async (key: string): Promise<boolean> => {
     // This is a placeholder - implement with react-native-encrypted-storage
     // const EncryptedStorage = require('react-native-encrypted-storage');
     // await EncryptedStorage.removeItem(key);
-    
+
     console.log(`Deleted secure data for key: ${key}`);
     return true;
   } catch (error) {
@@ -241,7 +241,7 @@ export const preventScreenshots = (prevent: boolean = true): void => {
       // } else {
       //   PreventScreenshot.allow();
       // }
-      
+
       console.log(`Screenshot prevention ${prevent ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Error setting screenshot prevention:', error);
@@ -255,7 +255,7 @@ export const preventScreenshots = (prevent: boolean = true): void => {
 export const logSecurityEvent = (event: string, details?: any): void => {
   const timestamp = new Date().toISOString();
   console.log(`[SECURITY] ${timestamp} - ${event}`, details || '');
-  
+
   // In production, send to a secure logging service
   // Do not log sensitive information like passwords, tokens, etc.
 };
@@ -266,7 +266,7 @@ export const logSecurityEvent = (event: string, details?: any): void => {
 export const validateSession = (token: string): boolean => {
   // Implement your session validation logic here
   // This could involve checking token expiry, validity, etc.
-  return token && token.length > 0;
+  return Boolean(token && token.length > 0);
 };
 
 /**

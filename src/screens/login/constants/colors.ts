@@ -1,0 +1,23 @@
+export const Colors = {
+  auth: {
+    primary: "#052659",
+    secondary: "#5483B3",
+    accent: "#C1E8FF",
+    gradientStart: "#052659",
+    gradientMiddle: "#5483B3", 
+    gradientEnd: "#C1E8FF",
+    backgroundLight: "#F8FAFC",
+    backgroundDark: "#021024",
+    white: "#FFFFFF",
+    textDark: "#021024",
+    textGray: "#64748B",
+    textLight: "#94A3B8",
+    buttonPrimary: "#052659",
+    buttonDisabled: "#94A3B8",
+    inputBg: "#FFFFFF",
+    inputBorder: "#E2E8F0",
+    inputFocus: "#5483B3",
+    shadowColor: "#000000",
+    error: "#EF4444",
+  },
+};

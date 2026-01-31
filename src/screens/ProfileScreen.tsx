@@ -12,11 +12,13 @@ import {
   Switch,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width } = Dimensions.get('window');
 
 const ProfileScreen = () => {
+  const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -105,7 +107,7 @@ const ProfileScreen = () => {
           '2FA adds an extra layer of security to your account',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Enable', onPress: () => {} },
+            { text: 'Enable', onPress: () => { } },
           ]
         );
         break;
@@ -309,7 +311,7 @@ const ProfileScreen = () => {
                 'Are you sure you want to logout?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Logout', style: 'destructive', onPress: () => {} },
+                  { text: 'Logout', style: 'destructive', onPress: () => { } },
                 ]
               )
             }
