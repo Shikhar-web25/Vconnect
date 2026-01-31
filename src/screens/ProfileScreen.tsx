@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -311,7 +312,13 @@ const ProfileScreen = () => {
                 'Are you sure you want to logout?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Logout', style: 'destructive', onPress: () => { } },
+                  {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: () => {
+                      navigation.navigate('Login' as never);
+                    }
+                  },
                 ]
               )
             }
@@ -542,3 +549,4 @@ const styles = StyleSheet.create({
 });
 
 export default ProfileScreen;
+
