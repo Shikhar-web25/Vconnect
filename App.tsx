@@ -1,46 +1,58 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-// 1. Import the provider and the hook for insets
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import BottomTabNavigator from './src/navigation/BottomTabNavigator';
+import SplashScreen from './src/screens/SplashScreen';
+import WelcomeScreen from './src/screens/WelcomeScreen';
 
-const App = () => {
+function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    checkFirstLaunch();
+  }, []);
+
+  const checkFirstLaunch = async () => {
+    try {
+      const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
+      if (!hasSeenWelcome) {
+        setShowWelcome(true);
+      }
+    } catch (error) {
+      console.error('Error checking first launch:', error);
+    }
+  };
+
+  const handleSplashComplete = () => {
+    setIsLoading(false);
+  };
+
+  const handleWelcomeComplete = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenWelcome', 'true');
+      setShowWelcome(false);
+    } catch (error) {
+      console.error('Error saving welcome status:', error);
+    }
+  };
+
+  // Show splash screen first
+  if (isLoading) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
+
+  // Show welcome screen for first-time users
+  if (showWelcome) {
+    return <WelcomeScreen onComplete={handleWelcomeComplete} />;
+  }
+
+  // Your existing navigation - unchanged
   return (
-    // 2. Wrap your entire app in the Provider
-    <SafeAreaProvider>
-      {/* 3. Use SafeAreaView to automatically handle padding for notches */}
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.title}>MentorLink</Text>
-          <Text style={styles.subtitle}>
-            Safe Area Context is now configured!
-          </Text>
-        </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <NavigationContainer>
+      <BottomTabNavigator />
+    </NavigationContainer>
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-});
+}
 
 export default App;
