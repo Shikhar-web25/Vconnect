@@ -5,29 +5,40 @@ import {
   StyleSheet,
   ActivityIndicator,
   Animated,
+  StyleProp,
+  ViewStyle,
+  TextStyle,
 } from "react-native";
 import { Colors } from "../../constants/colors";
+
 interface AuthButtonProps {
   title: string;
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
   variant?: "primary" | "secondary";
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
+
 const AuthButton: React.FC<AuthButtonProps> = ({
   title,
   onPress,
   loading = false,
   disabled = false,
   variant = "primary",
+  style,
+  textStyle,
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.96,
       useNativeDriver: true,
     }).start();
   };
+
   const handlePressOut = () => {
     Animated.spring(scaleAnim, {
       toValue: 1,
@@ -36,7 +47,9 @@ const AuthButton: React.FC<AuthButtonProps> = ({
       useNativeDriver: true,
     }).start();
   };
+
   const isDisabled = disabled || loading;
+
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
@@ -44,6 +57,7 @@ const AuthButton: React.FC<AuthButtonProps> = ({
           styles.button,
           variant === "secondary" && styles.buttonSecondary,
           isDisabled && styles.buttonDisabled,
+          style,
         ]}
         onPress={onPress}
         onPressIn={handlePressIn}
@@ -58,6 +72,7 @@ const AuthButton: React.FC<AuthButtonProps> = ({
             style={[
               styles.buttonText,
               variant === "secondary" && styles.buttonTextSecondary,
+              textStyle,
             ]}
           >
             {title}
