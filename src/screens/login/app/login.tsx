@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,92 +9,372 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Keyboard,
   StatusBar,
   TextInput,
+  Linking,
+  ActivityIndicator,
   Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { Mail, Lock } from "lucide-react-native";
+import { Mail, Lock, Check, Sparkles } from "lucide-react-native";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
-import * as Constants from "expo-constants";
 
-import AuthInput from "../components/auth/AuthInput";
 import PasswordInput from "../components/auth/PasswordInput";
 import AuthButton from "../components/auth/AuthButton";
-import { Colors } from "../constants/colors";
 import { supabase } from "../../../../supabaseClient";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const DOMAIN_TEXT = "vitbhopal.ac.in";
 const VIT_DOMAIN = "@vitbhopal.ac.in";
 
 // ---------------------------------------------------------------------------
-// Animated Google Button  (scroll-unroll reveal)
+// Floating Background Particle
 // ---------------------------------------------------------------------------
-// The button starts as a thin pill that "unrolls" horizontally to full width,
-// then the text fades in once the pill is fully open.
-const AnimatedGoogleButton: React.FC<{
+const FloatingParticle: React.FC<{ delay: number }> = ({ delay }) => {
+  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const startX = Math.random() * SCREEN_WIDTH;
+    const endX = startX + (Math.random() - 0.5) * 80;
+    const duration = 8000 + Math.random() * 4000;
+
+    translateX.setValue(startX);
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 0.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(translateY, {
+            toValue: -100,
+            duration: duration,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateX, {
+            toValue: endX,
+            duration: duration,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const size = 3 + Math.random() * 5;
+
+  return (
+    <Animated.View
+      style={[
+        styles.floatingParticle,
+        {
+          width: size,
+          height: size,
+          opacity,
+          transform: [{ translateX }, { translateY }, { scale }],
+        },
+      ]}
+    />
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Animated Domain Badge (with sparkle effect)
+// ---------------------------------------------------------------------------
+const DomainBadge: React.FC<{ visible: boolean; typedDomain: string }> = ({
+  visible,
+  typedDomain,
+}) => {
+  const slideX = useRef(new Animated.Value(100)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const sparkleScale = useRef(new Animated.Value(0)).current;
+  const sparkleOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(slideX, {
+          toValue: 0,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Sparkle effect after slide-in
+        Animated.sequence([
+          Animated.parallel([
+            Animated.spring(sparkleScale, {
+              toValue: 1.2,
+              friction: 3,
+              tension: 80,
+              useNativeDriver: true,
+            }),
+            Animated.timing(sparkleOpacity, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.spring(sparkleScale, {
+              toValue: 0,
+              friction: 5,
+              useNativeDriver: true,
+            }),
+            Animated.timing(sparkleOpacity, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]).start();
+      });
+    } else {
+      slideX.setValue(100);
+      opacity.setValue(0);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.domainBadgeContainer,
+        {
+          opacity,
+          transform: [{ translateX: slideX }],
+        },
+      ]}
+    >
+      <View style={styles.domainBadge}>
+        <Text style={styles.domainAt}>@</Text>
+        <Text style={styles.domainText}>{typedDomain}</Text>
+      </View>
+      <Animated.View
+        style={[
+          styles.sparkle,
+          {
+            opacity: sparkleOpacity,
+            transform: [{ scale: sparkleScale }],
+          },
+        ]}
+      >
+        <Sparkles size={16} color="#F59E0B" />
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Success Checkmark with Ripple
+// ---------------------------------------------------------------------------
+const SuccessCheckmark: React.FC<{ visible: boolean }> = ({ visible }) => {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const rippleScale = useRef(new Animated.Value(0)).current;
+  const rippleOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Ripple effect
+      Animated.loop(
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(rippleScale, {
+              toValue: 2,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(rippleOpacity, {
+              toValue: 0,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.delay(500),
+        ])
+      ).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View style={styles.successCheckmarkContainer}>
+      <Animated.View
+        style={[
+          styles.successRipple,
+          {
+            opacity: rippleOpacity,
+            transform: [{ scale: rippleScale }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.successCheckmark,
+          {
+            transform: [{ scale: scaleAnim }, { rotate }],
+          },
+        ]}
+      >
+        <Check size={32} color="#10B981" strokeWidth={3} />
+      </Animated.View>
+    </View>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Animated Google Button (with shimmer)
+// ---------------------------------------------------------------------------
+const AnimatedGoogleButton = ({
+  onPress,
+  loading,
+  animDelay = 0,
+}: {
   onPress: () => void;
   loading: boolean;
   animDelay?: number;
-}> = ({ onPress, loading, animDelay = 0 }) => {
-  // width animates from ~60 (icon-only pill) → full container width
+}) => {
   const widthAnim = useRef(new Animated.Value(60)).current;
-  // text opacity fades in after the pill finishes opening
   const textOpacity = useRef(new Animated.Value(0)).current;
-  // subtle scale-bounce on press
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
+    const t = setTimeout(() => {
       Animated.sequence([
-        // 1) unroll the pill
         Animated.spring(widthAnim, {
-          toValue: SCREEN_WIDTH - 48, // match parent padding
+          toValue: SCREEN_WIDTH - 48,
           friction: 6,
           tension: 40,
-          useNativeDriver: false, // width cannot use native driver
+          useNativeDriver: false,
         }),
-        // 2) fade the label in
         Animated.timing(textOpacity, {
           toValue: 1,
-          duration: 250,
-          easing: Easing.out(Easing.ease),
+          duration: 220,
           useNativeDriver: true,
         }),
       ]).start();
     }, animDelay);
 
-    return () => clearTimeout(timeout);
+    // Shimmer effect
+    Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 2000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      })
+    ).start();
+
+    return () => clearTimeout(t);
   }, []);
 
-  const handlePressIn = () =>
-    Animated.spring(scaleAnim, { toValue: 0.94, useNativeDriver: true }).start();
-  const handlePressOut = () =>
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.02,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [loading]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-100, SCREEN_WIDTH],
+  });
 
   return (
-    <Animated.View style={[styles.googleOuterShell, { width: widthAnim, transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View
+      style={[
+        styles.googleOuterShell,
+        { width: widthAnim, transform: [{ scale: pulseAnim }] },
+      ]}
+    >
       <TouchableOpacity
-        activeOpacity={1}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={loading}
         style={styles.googleInnerRow}
+        onPress={onPress}
+        activeOpacity={0.9}
+        disabled={loading}
       >
-        {/* Google G icon (always visible) */}
+        <Animated.View
+          style={[
+            styles.googleShimmer,
+            {
+              transform: [{ translateX: shimmerTranslate }],
+            },
+          ]}
+        />
         <View style={styles.googleIconBubble}>
-          <MaterialCommunityIcons name="google" size={22} color="#fff" />
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <MaterialCommunityIcons name="google" size={22} color="#fff" />
+          )}
         </View>
 
-        {/* Label that fades in after unroll */}
         <Animated.Text style={[styles.googleLabel, { opacity: textOpacity }]}>
-          {loading ? "Opening Google…" : "Continue with Google"}
+          Continue with Google
         </Animated.Text>
       </TouchableOpacity>
     </Animated.View>
@@ -102,489 +382,660 @@ const AnimatedGoogleButton: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
-// Animated Domain Badge  (slides in from the right when '@' is typed)
+// Main Login Screen
 // ---------------------------------------------------------------------------
-const DomainBadge: React.FC<{ visible: boolean }> = ({ visible }) => {
-  const slideX = useRef(new Animated.Value(SCREEN_WIDTH * 0.4)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  // a small "pop" scale
-  const scale = useRef(new Animated.Value(0.7)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.spring(slideX, { toValue: 0, friction: 7, tension: 50, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.spring(scale, { toValue: 1, friction: 5, tension: 60, useNativeDriver: true }),
-      ]).start();
-    }
-    // We intentionally do NOT animate back out — once the domain appears it stays.
-  }, [visible]);
-
-  return (
-    <Animated.View
-      style={[
-        styles.domainBadge,
-        {
-          translateX: slideX,
-          opacity,
-          transform: [{ translateX: slideX }, { scale }],
-        },
-      ]}
-    >
-      <Text style={styles.domainBadgeAt}>@</Text>
-      <Text style={styles.domainBadgeText}>vitbhopal.ac.in</Text>
-    </Animated.View>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// LoginScreen
-// ---------------------------------------------------------------------------
-const LoginScreen: React.FC = () => {
+const LoginScreen = () => {
   const navigation = useNavigation<any>();
 
-  // ── state ──────────────────────────────────────────────────────────────
-  // We only store the USERNAME part (before the @).  The domain is rendered
-  // as a locked animated badge beside it.
   const [username, setUsername] = useState("");
-  const [domainVisible, setDomainVisible] = useState(false);
   const [password, setPassword] = useState("");
+
+  const [typedDomain, setTypedDomain] = useState("");
+  const [showDomainBadge, setShowDomainBadge] = useState(false);
+  const typingRef = useRef<any>(null);
+
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // ── entrance animations ──────────────────────────────────────────────
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const logoScaleAnim = useRef(new Animated.Value(0.8)).current;
-  const logoOpacityAnim = useRef(new Animated.Value(0)).current;
-  const keyboardOffsetAnim = useRef(new Animated.Value(0)).current;
+  const [emailFocused, setEmailFocused] = useState(false);
 
-  useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(logoScaleAnim, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
-        Animated.timing(logoOpacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 90, delay: 100, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, delay: 200, useNativeDriver: true }),
-      ]),
-    ]).start();
-
-    const keyboardWillShow = (e: any) => {
-      setKeyboardHeight(e.endCoordinates.height);
-      Animated.timing(keyboardOffsetAnim, { toValue: -SCREEN_HEIGHT * 0.15, duration: 300, useNativeDriver: true }).start();
-    };
-    const keyboardWillHide = () => {
-      setKeyboardHeight(0);
-      Animated.timing(keyboardOffsetAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    };
-
-    const showListener = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      keyboardWillShow
-    );
-    const hideListener = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      keyboardWillHide
-    );
-
-    return () => {
-      showListener.remove();
-      hideListener.remove();
-    };
-  }, []);
-
-  // ── handlers ─────────────────────────────────────────────────────────
-  const handleUsernameChange = useCallback((text: string) => {
-    // Strip out everything from '@' onward — user cannot type or paste a domain.
-    const cleaned = text.split("@")[0];
-    setUsername(cleaned);
-
-    // The moment the raw input contains '@' we lock the domain badge open.
-    if (text.includes("@") && !domainVisible) {
-      setDomainVisible(true);
-    }
-
-    // Clear inline error while typing
-    if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-  }, [domainVisible, errors.email]);
-
-  const validateForm = (): boolean => {
-    const newErrors: { email?: string; password?: string } = {};
-    if (!username.trim()) newErrors.email = "Enter your username";
-    if (!password.trim()) newErrors.password = "Password is required";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const errorOpacity = useRef(new Animated.Value(0)).current;
+  const errorPulse = useRef(new Animated.Value(1)).current;
+  const successOpacity = useRef(new Animated.Value(0)).current;
+  const logoRotateAnim = useRef(new Animated.Value(0)).current;
+  const emailGlowAnim = useRef(new Animated.Value(0)).current;
+  const ctaPulseAnim = useRef(new Animated.Value(1)).current;
 
   const getFullEmail = () => `${username.trim()}${VIT_DOMAIN}`;
 
+  const canSignIn = username.trim().length > 0 && password.length > 0;
+
+  // ── Logo rotation ────────────────────────────────────────────────────
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(logoRotateAnim, {
+        toValue: 1,
+        duration: 12000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  // ── Email glow on focus ──────────────────────────────────────────────
+  useEffect(() => {
+    Animated.timing(emailGlowAnim, {
+      toValue: emailFocused ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [emailFocused]);
+
+  // ── CTA pulse when ready ─────────────────────────────────────────────
+  useEffect(() => {
+    if (canSignIn) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(ctaPulseAnim, {
+            toValue: 1.03,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(ctaPulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      ctaPulseAnim.setValue(1);
+    }
+  }, [canSignIn]);
+
+  // ── Shake animation ──────────────────────────────────────────────────
+  const shake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
+  };
+
+  // ── Domain typing animation ──────────────────────────────────────────
+  const startDomainTyping = () => {
+    if (typingRef.current) return;
+    let i = 0;
+    setTypedDomain("");
+    setShowDomainBadge(true);
+
+    typingRef.current = setInterval(() => {
+      i++;
+      setTypedDomain(DOMAIN_TEXT.slice(0, i));
+      if (i >= DOMAIN_TEXT.length) {
+        clearInterval(typingRef.current);
+        typingRef.current = null;
+      }
+    }, 35);
+  };
+
+  const stopDomainTyping = () => {
+    if (typingRef.current) {
+      clearInterval(typingRef.current);
+      typingRef.current = null;
+    }
+    setTypedDomain("");
+    setShowDomainBadge(false);
+  };
+
+  // ── Error animation ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (error) {
+      Animated.parallel([
+        Animated.timing(errorOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(errorPulse, { toValue: 1.05, duration: 100, useNativeDriver: true }),
+          Animated.timing(errorPulse, { toValue: 1, duration: 100, useNativeDriver: true }),
+        ]),
+      ]).start();
+    } else {
+      errorOpacity.setValue(0);
+      errorPulse.setValue(1);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (successMsg) {
+      Animated.timing(successOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      successOpacity.setValue(0);
+    }
+  }, [successMsg]);
+
+  // ── Google Login ─────────────────────────────────────────────────────
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: "vconnect://auth-callback",
+        skipBrowserRedirect: true,
+        queryParams: {
+          prompt: "select_account",
+          hd: "vitbhopal.ac.in",
+        },
+        scopes: "email profile",
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      setGoogleLoading(false);
+      shake();
+      return;
+    }
+
+    if (data?.url) {
+      await Linking.openURL(data.url);
+    }
+
+    setGoogleLoading(false);
+  };
+
+  // ── OAuth Return Handler ─────────────────────────────────────────────
+  useEffect(() => {
+    const sub = Linking.addEventListener("url", async ({ url }) => {
+      if (!url.includes("auth-callback")) return;
+
+      const { data } = await supabase.auth.getUser();
+      const email = data.user?.email || "";
+
+      if (!email.endsWith(VIT_DOMAIN)) {
+        await supabase.auth.signOut();
+        setError("Only VIT Bhopal emails allowed");
+        shake();
+        return;
+      }
+
+      setSuccessMsg("Login successful");
+
+      setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+      }, 600);
+    });
+
+    return () => sub.remove();
+  }, []);
+
+  // ── Email Login ──────────────────────────────────────────────────────
   const handleLogin = async () => {
-    if (!validateForm()) return;
+    if (!username.trim() || !password) {
+      setError("Enter email and password");
+      shake();
+      return;
+    }
+
     setLoading(true);
-    setErrors({});
+    setError(null);
+    setSuccessMsg(null);
+
     const { error } = await supabase.auth.signInWithPassword({
       email: getFullEmail(),
       password,
     });
-    if (error) setErrors({ general: error.message });
+
+    if (error) {
+      setError(error.message);
+      shake();
+      setLoading(false);
+      return;
+    }
+
+    setSuccessMsg("Login successful");
+
+    setTimeout(() => {
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+    }, 600);
+
     setLoading(false);
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
-      // Build a scheme-based redirect that works in both Expo dev and production.
-      // expo-constants gives us the app scheme (e.g. "vconnect").
-      // Fall back to the classic Expo dev tunnel URL if no scheme is configured.
-      const scheme = Constants.expoConfig?.scheme ?? "exp";
-      const redirectTo = `${scheme}://google-auth-callback`;
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
-      });
-      if (error) console.log("Google OAuth error:", error.message);
-    } catch (err) {
-      console.error("Google login failed:", err);
-    } finally {
-      setLoading(false);
+  const handleUsernameChange = (text: string) => {
+    if (text.includes("@")) {
+      const clean = text.split("@")[0];
+      setUsername(clean);
+      if (!typedDomain) startDomainTyping();
+    } else {
+      setUsername(text);
+      stopDomainTyping();
     }
   };
 
-  // ── render ───────────────────────────────────────────────────────────
+  const logoRotate = logoRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const emailBorderColor = emailGlowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["#E2E8F0", "#3B82F6"],
+  });
+
+  const emailGlowOpacity = emailGlowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.3],
+  });
+
   return (
     <LinearGradient colors={["#4A6D8C", "#6B8CAE"]} style={styles.screen}>
       <StatusBar translucent barStyle="light-content" backgroundColor="transparent" />
 
-      {/* ── Logo header ── */}
-      <View style={styles.headerWrapper}>
-        <Animated.View style={[styles.headerContent, { opacity: logoOpacityAnim, transform: [{ scale: logoScaleAnim }] }]}>
-          <View style={styles.logoBadge}>
-            <MaterialCommunityIcons name="school" size={40} color="#FFFFFF" />
-          </View>
-          <Text style={styles.appName}>Vconnect</Text>
-          <Text style={styles.tagline}>Connect with VITians</Text>
-        </Animated.View>
+      {/* Floating particles */}
+      <View style={styles.particlesContainer} pointerEvents="none">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <FloatingParticle key={i} delay={i * 500} />
+        ))}
       </View>
 
-      {/* ── Sliding card ── */}
-      <Animated.View style={[styles.cardWrapper, { transform: [{ translateY: Animated.add(slideAnim, keyboardOffsetAnim) }] }]}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-          <ScrollView
-            contentContainerStyle={[styles.cardScroll, keyboardHeight > 0 && { paddingBottom: keyboardHeight + 20 }]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.cardHeader}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.cardScroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+            <View style={styles.headerSection}>
+              <Animated.View
+                style={[
+                  styles.logoBadge,
+                  { transform: [{ rotate: logoRotate }] },
+                ]}
+              >
+                <MaterialCommunityIcons name="school" size={36} color="#FFFFFF" />
+              </Animated.View>
               <Text style={styles.title}>Welcome Back</Text>
               <Text style={styles.subtitle}>Sign in to continue</Text>
             </View>
 
-            <View style={styles.form}>
-              {/* General / server error banner */}
-              {errors.general && (
-                <View style={styles.generalErrorContainer}>
-                  <Text style={styles.generalErrorText}>{errors.general}</Text>
-                </View>
-              )}
+            {/* Error message with pulse */}
+            {error && (
+              <Animated.View
+                style={[
+                  styles.errorBanner,
+                  {
+                    opacity: errorOpacity,
+                    transform: [{ scale: errorPulse }],
+                  },
+                ]}
+              >
+                <Text style={styles.errorText}>{error}</Text>
+              </Animated.View>
+            )}
 
-              {/* ── Email row: username input + animated domain badge ── */}
-              <View style={styles.emailFieldWrapper}>
-                <View style={[styles.emailInputRow, errors.email && styles.emailInputRowError]}>
-                  <Mail size={20} color="#64748B" style={styles.emailIcon} />
+            {/* Success message with ripple checkmark */}
+            {successMsg && (
+              <Animated.View
+                style={[styles.successBanner, { opacity: successOpacity }]}
+              >
+                <SuccessCheckmark visible={true} />
+                <Text style={styles.successText}>{successMsg}</Text>
+              </Animated.View>
+            )}
 
-                  {/* Username portion (editable) */}
-                  <TextInput
-                    style={styles.emailUsernameInput}
-                    placeholder={domainVisible ? "" : "Email Address"}
-                    placeholderTextColor="#94A3B8"
-                    value={username}
-                    onChangeText={handleUsernameChange}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="email-address"
-                    returnKeyType="next"
-                  />
-
-                  {/* Locked domain badge — slides in on first '@' */}
-                  <DomainBadge visible={domainVisible} />
-                </View>
-
-                {errors.email && <Text style={styles.fieldError}>{errors.email}</Text>}
-              </View>
-
-              {/* ── Password ── */}
-              <PasswordInput
-                placeholder="Password"
-                value={password}
-                onChangeText={(text: string) => {
-                  setPassword(text);
-                  if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
-                }}
-                icon={<Lock size={20} color="#64748B" />}
-                style={styles.inputStyle}
-                error={errors.password}
+            {/* Email input with glow on focus */}
+            <View style={styles.emailContainer}>
+              <Animated.View
+                style={[
+                  styles.emailGlow,
+                  {
+                    opacity: emailGlowOpacity,
+                    shadowColor: "#3B82F6",
+                  },
+                ]}
               />
+              <Animated.View
+                style={[
+                  styles.emailRow,
+                  {
+                    borderColor: emailBorderColor,
+                  },
+                ]}
+              >
+                <Mail size={20} color="#64748B" style={styles.emailIcon} />
 
-              {/* Forgot password link */}
-              <TouchableOpacity onPress={() => navigation.navigate("ForgotPassword")} style={styles.forgotButton}>
-                <Text style={styles.forgotText}>Forgot Password?</Text>
-              </TouchableOpacity>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Username"
+                  placeholderTextColor="#94A3B8"
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                />
 
-              {/* Sign-in CTA */}
-              <AuthButton title="Sign In" onPress={handleLogin} loading={loading} style={styles.loginBtn} textStyle={styles.loginBtnText} />
-
-              {/* OR divider */}
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* ── Google button (scroll-unroll) ── */}
-              <AnimatedGoogleButton onPress={handleGoogleLogin} loading={loading} animDelay={600} />
-
-              {/* Sign-up link */}
-              <View style={styles.signupContainer}>
-                <Text style={styles.signupText}>Don't have an account? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-                  <Text style={styles.signupLink}>Sign Up</Text>
-                </TouchableOpacity>
-              </View>
+                <DomainBadge visible={showDomainBadge} typedDomain={typedDomain} />
+              </Animated.View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Animated.View>
+
+            <PasswordInput
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              icon={<Lock size={20} color="#64748B" />}
+              style={styles.passwordInput}
+            />
+
+            <TouchableOpacity
+              onPress={() => navigation.navigate("ForgotPassword")}
+              style={styles.forgotButton}
+            >
+              <Text style={styles.forgotText}>Forgot Password?</Text>
+            </TouchableOpacity>
+
+            <Animated.View
+              style={{
+                marginTop: 24,
+                transform: [{ scale: ctaPulseAnim }],
+              }}
+            >
+              <AuthButton
+                title="Sign In"
+                onPress={handleLogin}
+                loading={loading}
+                disabled={!canSignIn}
+              />
+            </Animated.View>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <AnimatedGoogleButton
+              onPress={handleGoogleLogin}
+              loading={googleLoading}
+              animDelay={400}
+            />
+
+            <View style={styles.signupContainer}>
+              <Text style={styles.signupText}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+                <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 };
 
 export default LoginScreen;
 
-// ---------------------------------------------------------------------------
-// StyleSheet  (was completely missing from the uploaded file)
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  // ── screen / gradient ──
-  screen: {
-    flex: 1,
-  },
+  screen: { flex: 1 },
 
-  // ── logo / header ──
-  headerWrapper: {
-    alignItems: "center",
-    paddingTop: 80,
-    paddingBottom: 24,
-  },
-  headerContent: {
-    alignItems: "center",
-  },
-  logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 1,
-  },
-  tagline: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.7)",
-    marginTop: 4,
-  },
-
-  // ── sliding card ──
-  cardWrapper: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    // subtle shadow so the card feels lifted
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   cardScroll: {
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: SCREEN_HEIGHT * 0.15,
     paddingBottom: 40,
   },
 
-  // ── card header ──
-  cardHeader: {
-    marginBottom: 24,
+  particlesContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
+
+  floatingParticle: {
+    position: "absolute",
+    borderRadius: 50,
+    backgroundColor: "rgba(255,255,255,0.6)",
+  },
+
+  headerSection: {
+    alignItems: "center",
+    marginBottom: 32,
+  },
+
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "700",
-    color: "#1E293B",
+    color: "#FFFFFF",
+    marginBottom: 6,
   },
+
   subtitle: {
     fontSize: 14,
-    color: "#64748B",
-    marginTop: 4,
+    color: "rgba(255,255,255,0.8)",
   },
 
-  // ── form ──
-  form: {},
-
-  // ── general error ──
-  generalErrorContainer: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 16,
+  errorBanner: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: "#FECACA",
   },
-  generalErrorText: {
+
+  errorText: {
     color: "#DC2626",
     fontSize: 13,
-  },
-
-  // ── email input row (username + domain badge) ──
-  emailFieldWrapper: {
-    marginBottom: 16,
-  },
-  emailInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 52,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
-    paddingHorizontal: 14,
-    // clip the domain badge so it slides in cleanly
-    overflow: "hidden",
-  },
-  emailInputRowError: {
-    borderColor: "#F87171",
-    backgroundColor: "#FEF2F2",
-  },
-  emailIcon: {
-    marginRight: 10,
-    flexShrink: 0,
-  },
-  emailUsernameInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#1E293B",
-    // make sure it doesn't push the badge off-screen
-    minWidth: 0,
-  },
-
-  // ── domain badge ──
-  domainBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#4A6D8C",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    flexShrink: 0,
-    marginLeft: 2,
-  },
-  domainBadgeAt: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginRight: 1,
-  },
-  domainBadgeText: {
-    fontSize: 13,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.9)",
   },
 
-  // field-level error text
-  fieldError: {
-    color: "#EF4444",
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 2,
-  },
-
-  // ── shared input style (passed down to AuthInput / PasswordInput) ──
-  inputStyle: {
-    marginBottom: 16,
-  },
-
-  // ── forgot password ──
-  forgotButton: {
-    alignSelf: "flex-end",
+  successBanner: {
+    backgroundColor: "#D1FAE5",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     marginBottom: 20,
-    marginTop: -8,
-  },
-  forgotText: {
-    fontSize: 13,
-    color: "#4A6D8C",
-    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: "#6EE7B7",
+    flexDirection: "row",
+    alignItems: "center",
   },
 
-  // ── primary sign-in button ──
-  loginBtn: {
-    backgroundColor: "#4A6D8C",
-    borderRadius: 12,
-    height: 52,
+  successText: {
+    color: "#047857",
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+
+  successCheckmarkContainer: {
+    position: "relative",
+  },
+
+  successRipple: {
+    position: "absolute",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#10B981",
+    top: -16,
+    left: -16,
+  },
+
+  successCheckmark: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#D1FAE5",
     alignItems: "center",
     justifyContent: "center",
   },
-  loginBtnText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+
+  emailContainer: {
+    marginBottom: 16,
+    position: "relative",
   },
 
-  // ── OR divider ──
+  emailGlow: {
+    position: "absolute",
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+
+  emailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 56,
+    borderWidth: 1.5,
+  },
+
+  emailIcon: {
+    marginRight: 10,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1E293B",
+    minWidth: 0,
+  },
+
+  domainBadgeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+
+  domainBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  domainAt: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#4A6D8C",
+  },
+
+  domainText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+
+  sparkle: {
+    position: "absolute",
+    top: -12,
+    right: -12,
+  },
+
+  passwordInput: {
+    marginBottom: 0,
+  },
+
+  forgotButton: {
+    alignSelf: "flex-end",
+    marginTop: 12,
+  },
+
+  forgotText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+
   divider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 22,
+    marginVertical: 24,
   },
+
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "rgba(255,255,255,0.3)",
   },
+
   dividerText: {
     fontSize: 13,
-    color: "#94A3B8",
+    color: "rgba(255,255,255,0.7)",
     fontWeight: "600",
     marginHorizontal: 12,
   },
 
-  // ── Google button shell (animated width) ──
   googleOuterShell: {
     height: 52,
     borderRadius: 12,
     backgroundColor: "#DB4437",
-    overflow: "hidden",
-    // centre it horizontally while it animates width
     alignSelf: "center",
-    marginBottom: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
+
   googleInnerRow: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
+    height: 52,
+    overflow: "hidden",
   },
+
+  googleShimmer: {
+    position: "absolute",
+    top: 0,
+    left: -100,
+    width: 100,
+    height: "100%",
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+
   googleIconBubble: {
     width: 38,
     height: 38,
@@ -592,30 +1043,32 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
+    zIndex: 1,
   },
+
   googleLabel: {
     color: "#FFFFFF",
     fontWeight: "700",
+    marginLeft: 12,
     fontSize: 15,
-    marginLeft: 10,
     letterSpacing: 0.3,
+    zIndex: 1,
   },
 
-  // ── sign-up footer ──
   signupContainer: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
+    marginTop: 24,
   },
+
   signupText: {
     fontSize: 14,
-    color: "#64748B",
+    color: "rgba(255,255,255,0.8)",
   },
+
   signupLink: {
     fontSize: 14,
-    color: "#4A6D8C",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
 });

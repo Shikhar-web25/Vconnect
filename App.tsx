@@ -1,43 +1,33 @@
-import React, { useState, useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-
 import { supabase } from "./supabaseClient";
-
-// Screens
-import LoginScreen from "./src/screens/login/app/login";
-import HomeScreen from "./src/screens/home/HomeScreen";
-
-const Stack = createNativeStackNavigator();
+import AuthNavigator from "./src/navigation/AuthNavigator";
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch any existing persisted session on mount
+    // Fetch existing session on mount
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
     });
 
-    // Supabase v2: onAuthStateChange returns { data: { subscription } }
+    // Listen to auth state changes (Google OAuth or email login)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
-    // Cleanup: unsubscribe on unmount
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View style={styles.loader}>
         <ActivityIndicator size="large" color="#4A6D8C" />
       </View>
     );
@@ -45,13 +35,16 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {session ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
-        ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        )}
-      </Stack.Navigator>
+      <AuthNavigator isAuthenticated={!!session} />
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+});

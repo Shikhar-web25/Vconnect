@@ -1,11 +1,13 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import LoginScreen from '../screens/login/app/login';
 import SignupScreen from '../screens/login/app/signup';
 import ForgotPasswordScreen from '../screens/login/app/forgot-password';
 import SplashScreen from '../screens/Splashscreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
+import AdminDashboard from '../screens/_admin/AdminDashboard';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -14,6 +16,7 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   Main: undefined;
   ChatDetail: { chatId: string; name: string; avatar: string };
+  AdminDashboard: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -32,7 +35,17 @@ const AuthNavigator = () => {
       }}
     >
       {isAuthenticated ? (
-        <Stack.Screen name="Main" component={BottomTabNavigator} />
+        <>
+          <Stack.Screen name="Main" component={BottomTabNavigator} />
+          <Stack.Screen
+            name="AdminDashboard"
+            component={AdminDashboard}
+            options={{
+              headerShown: true,
+              title: 'Admin Dashboard'
+            }}
+          />
+        </>
       ) : (
         <>
           <Stack.Screen
@@ -75,6 +88,14 @@ const AuthNavigator = () => {
             name="ChatDetail"
             component={ChatDetailScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AdminDashboard"
+            component={AdminDashboard}
+            options={{
+              headerShown: true,
+              title: 'Admin Dashboard'
+            }}
           />
         </>
       )}
