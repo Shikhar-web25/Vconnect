@@ -3,169 +3,196 @@ import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   ScrollView,
   TextInput,
   TouchableOpacity,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { COLORS } from "../theme/colors";
+
 import MentorAvatar from "../components/discover/MentorAvatar";
 import OpportunityCard from "../components/discover/OpportunityCard";
+import FloatingFAB from "../components/home/FloatingFAB";
 
 const DiscoverScreen = () => {
+  const navigation = useNavigation<any>();
+
+  const profiles = [
+    { name: "Dr. Alex", image: "https://randomuser.me/api/portraits/men/32.jpg" },
+    { name: "Sarah W.", image: "https://randomuser.me/api/portraits/women/44.jpg" },
+    { name: "Marcus C.", image: "https://randomuser.me/api/portraits/men/75.jpg" },
+    { name: "Lisa K.", image: "https://randomuser.me/api/portraits/women/65.jpg" },
+  ];
+
+  const opportunities = [
+    {
+      id: "1",
+      type: "Internship",
+      title: "Software Engineering Intern at Tech Corp",
+      daysAgo: "2 days ago",
+      image: "https://picsum.photos/400/200",
+      description: "Join our development team and build scalable apps.",
+    },
+    {
+      id: "2",
+      type: "Research",
+      title: "Summer Research Program: AI Ethics",
+      daysAgo: "5 days ago",
+      image: "https://picsum.photos/400/201",
+      description: "Explore AI and human rights with funded research.",
+    },
+  ];
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4A6D8C" />
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+
+      <SafeAreaView style={{ flex: 1 }}>
         {/* HEADER */}
         <View style={styles.header}>
           <Text style={styles.title}>Discover</Text>
+        </View>
 
+        {/* SEARCH BAR */}
+        <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
             <Icon name="search" size={24} color="#64748B" />
             <TextInput
-              placeholder="Mentors or opportunities..."
-              placeholderTextColor="#94A3B8"
+              placeholder="Profiles or opportunities..."
               style={styles.searchInput}
             />
           </View>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* TOP MENTORS */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top Mentors</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAll}>View All</Text>
-            </TouchableOpacity>
-          </View>
+        {/* MAIN LIST */}
+        <FlatList
+          data={opportunities}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 110 }}
+          ListHeaderComponent={
+            <>
+              {/* TOP PROFILES SECTION */}
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Top Profiles</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("AllSeniors")}
+                >
+                  <Text style={styles.viewAll}>View More</Text>
+                </TouchableOpacity>
+              </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <MentorAvatar
-              name="Dr. Alex"
-              image="https://randomuser.me/api/portraits/men/32.jpg"
-            />
-            <MentorAvatar
-              name="Sarah W."
-              image="https://randomuser.me/api/portraits/women/44.jpg"
-            />
-            <MentorAvatar
-              name="Marcus C."
-              image="https://randomuser.me/api/portraits/men/75.jpg"
-            />
-            <MentorAvatar name="See More" />
-          </ScrollView>
+              {/* HORIZONTAL PROFILE SCROLL */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  paddingLeft: 20,
+                  paddingRight: 10,
+                }}
+              >
+                {profiles.map((p, i) => (
+                  <View key={i} style={{ marginRight: 16 }}>
+                    <MentorAvatar name={p.name} image={p.image} />
+                  </View>
+                ))}
+              </ScrollView>
 
-          {/* FEED */}
-          <View style={styles.feed}>
-            <Text style={styles.feedTitle}>Opportunities</Text>
+              {/* OPPORTUNITIES TITLE */}
+              <View style={styles.feed}>
+                <Text style={styles.feedTitle}>Opportunities</Text>
+              </View>
+            </>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.cardWrapper}>
+              <OpportunityCard {...item} />
+            </View>
+          )}
+        />
 
-            <OpportunityCard
-              type="Internship"
-              title="Software Engineering Intern at Tech Corp"
-              daysAgo="2 days ago"
-              image="https://picsum.photos/400/200"
-              description="Join our fast-paced development team to build scalable cloud solutions and learn from industry leaders."
-            />
-
-            <OpportunityCard
-              type="Research"
-              title="Summer Research Program: AI Ethics"
-              daysAgo="5 days ago"
-              image="https://picsum.photos/400/201"
-              description="Explore the intersection of artificial intelligence and human rights with funded research."
-            />
-          </View>
-        </ScrollView>
+        {/* FLOATING BUTTON */}
+        <FloatingFAB onPress={() => console.log("Add")} />
       </SafeAreaView>
-    </View >
+    </View>
   );
 };
 
 export default DiscoverScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#4A6D8C', // Premium Slate Blue
-  },
+  container: { flex: 1, backgroundColor: "#4A6D8C" },
+
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 8,
   },
+
   title: {
-    color: "#FFFFFF",
+    color: "#fff",
     fontSize: 32,
     fontWeight: "800",
-    marginBottom: 16,
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.15)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
   },
+
+  searchContainer: {
+    backgroundColor: "#4A6D8C",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF", // Crisp white pill
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: "#fff",
     borderRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
+
   searchInput: {
-    marginLeft: 12,
-    color: "#0F172A", // Dark slate text
     flex: 1,
-    fontSize: 16,
-    fontWeight: "500",
+    marginLeft: 10,
   },
+
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: 'center',
-    marginVertical: 20,
-    paddingHorizontal: 20,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 10,
   },
+
   sectionTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
+    color: "#fff",
     fontWeight: "700",
-    letterSpacing: 0.3,
+    fontSize: 18,
   },
+
   viewAll: {
     color: "rgba(255,255,255,0.9)",
-    fontSize: 13,
     fontWeight: "600",
   },
-  mentorScroll: {
-    paddingLeft: 20,
-    paddingBottom: 24, // Space for avatar shadows if needed
-  },
+
   feed: {
-    backgroundColor: '#F8FAFC', // Very light slate gray
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingTop: 32,
-    minHeight: 500, // Ensure it fills down
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 10,
+    backgroundColor: "#F8FAFC",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 24,
   },
+
   feedTitle: {
-    color: '#0F172A', // Dark slate
     fontSize: 22,
     fontWeight: "700",
-    marginBottom: 16,
-    letterSpacing: -0.3,
+  },
+
+  cardWrapper: {
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 24,
+    paddingBottom: 14,
   },
 });
