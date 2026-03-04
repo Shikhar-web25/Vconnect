@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   StatusBar,
   Animated,
   Dimensions,
@@ -15,7 +14,9 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -28,108 +29,13 @@ interface Mentor {
   online?: 'green' | 'yellow' | null;
   highlight?: boolean;
   bio?: string;
+  experience?: string;   // e.g. "10+ yrs @ Google"
+  skills?: string;       // e.g. "ML & Analytics"
 }
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const MENTORS: Mentor[] = [
-  {
-    id: '1',
-    name: 'Marcus C.',
-    specialty: 'Full Stack',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBbwPdVRuYVUwqz7ApsUJGO-XS5z5Rh5-xOAq2JZRMRJGo1KC6cKHFho11ktCXCt_-Ko4FXz7NBYdQwDWWcPpC47Vgb68hThDnaLS688dsxH_J43eDC9wG4vXd1qxYzHbMI1Bwldj2T3ab2qX7XtfAAr9MXwKJz8NxN1RaNzPqhXM620D1NyNQXkrWaCK9uHB8Dssfzer-fcYHHIqCHiOQX8UsG2XQ_Dmoemxd1DEO22EyL7oYJ4hud6L0LfsRPAI98WuZ4C8q4CwRs',
-    online: null,
-    bio: '8 years building full-stack apps. Expert in React, Node.js, and cloud architecture. Helped 50+ engineers land senior roles.',
-  },
-  {
-    id: '2',
-    name: 'Lisa K.',
-    specialty: 'Product',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuASFKwpsssbBDOzFttjEe_5yyZkPMwS7qU_Erg-pcdaGHvNdironC-NRjpms9kKOrwQHWdY1_hIwpDpjAc2UsqQrk-dD2nhZS7_JCtLwvyVhmTlCh3EsxyLmIAUmWsHlNEPfx4cmY20odRxTaXYBa1Gw_SngeBJCEBcCeKv1LIsQnIxliXdtfikUymLqRohR6xX6ZBbJonsr9JNu7eQm0m3Vjz0--jiLoY4RXgO_xMA6tHVgao7Hq2ql1wmocZg7BuJGLC9SsarXBfi',
-    online: 'yellow',
-    bio: 'Product lead at two unicorn startups. Specializes in 0-to-1 products, user research, and roadmap strategy.',
-  },
-  {
-    id: '3',
-    name: 'James L.',
-    specialty: 'Marketing',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAf2JS2e5WJ94a-yXN75eH0CYW5PqaAVS1SvSWDQQJUvX2jOZdd3r7vlvukWT75_-cXE9k6YWWoFzkGNdxSDUHtN8Eik7ymi2mU-HH9p4d5PaxMp_oRPycf1bjHHTT__XDtQqi5SStKO9SYqMrhhbPtmicFiBd2ZoQrnXx8b7gnQyqoM59xVbQf8ipDAORIK5ctF_Ea-A8sQPMC3ozO6Lg9UTQ23bPhoMdJIU_N0nJQ9a7mHVu0fNUnHvubvNrPZRgaRd4TVtfnL1wi',
-    highlight: true,
-    online: null,
-    bio: 'Growth marketing veteran with experience scaling B2B and B2C brands. Deep expertise in SEO, paid ads, and brand storytelling.',
-  },
-  {
-    id: '4',
-    name: 'Elena R.',
-    specialty: 'HR Consult',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBnCGLDIYL4t5JrTApf_1Til8Bco-ncmu2Oi2o-11oaCtQc_c2CYHqk6am5YgUoaFfXRmVXwbghF5qY2eGjSCQd5_xxTZ6TGlVz5Syv0wWTjl35W6hQZy8vBvteWWABRBMJYfPByrEFSvM3NnZqinP_rIR6XcVKGC8Ds2oKb4aagujG4c6uOEkWbZ6c2qDvcBLFfWW_ZtTnmKxLTgEVlNT5VbrZiHGOX1w2l3Muo7CdRoeou7InA2VZ3hr5NnydvBza2OU3PeBXjnDu',
-    online: null,
-    bio: 'Former HR director at Fortune 500 companies. Guides professionals on interviews, negotiations, and career transitions.',
-  },
-  {
-    id: '5',
-    name: 'Chris P.',
-    specialty: 'Mobile Dev',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDzDY2fwKFDXTlslCDpG-U-ugD_gxtwJ-E58nSc_Zi7-yrntIFAbvTuprS6cBsmTJEy6qTKcAglsO83FB2yWg9wcMLM8A0g5bTAfriEfr3_Ia1mg7uMsi8Vam6vbbj4XuUrsnbsaSbL4UggpiZ5zsfiRFOFyd_VNEEyXtzNXy2CLQCO-axxGzXUTKNSuMXWEulMrPxV1c4UmpCnN1B0UpobGIldoMsPJo4x6LcX6GtHEq8gEXpYV6UUwQ2QQJkOF6dftBbK6QnowYqH',
-    online: null,
-    bio: 'iOS & Android developer with 6 years shipping consumer apps. Specializes in React Native, Swift, and app store optimization.',
-  },
-  {
-    id: '6',
-    name: 'Nina J.',
-    specialty: 'DevOps',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuB4-Rve3tsG4CXnAxMhzgu6_7gcScjaLsxglUaPtzyGTSIcAZCZo0a6qDCNLxVuuFPliuMyI_6BcCrV0lpcwAe5f-B9i3IaejCPE945Pk3zK32s9wUDLhzf6nTaalZMwVrIQUeHObRBYQslxy3R6Tc-xiAUG2NmVVWlczlFqz1K-NaI2M0bIFctYcU9-bTzq_bOBrg1zWUBe4IBX9qJMGw0QCYp4t6zbH2t_gy6hQlAhgSDS44S909V2cSWy6fih-A0SbuXYPe8R6Bd',
-    online: 'green',
-    bio: 'DevOps engineer specializing in Kubernetes, CI/CD pipelines, and cloud infrastructure. Currently available for mentoring sessions.',
-  },
-  {
-    id: '7',
-    name: 'Vikram S.',
-    specialty: 'AI Ethics',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCJIipjZyZKgL2LxOqp40lGd4nEVXPBz9A6n2UEMlLWflwaioQDzIQlNF-Bw1SGxKKO0dNGmJhnHfImhOPUR2H8JkgIxnNiIbtG2BN20PfuIZzPprIdCisx0PN7W5-g0WOQ6DHByuBxSuUNR7Zhycd4MV3S4TmOg5hqnzPWKi4iSYiqYwGLPRoVJcHbY2NoChkWos1FpOBlSY3P1AHqTCkvR6YSho3B_cPzJgjAlOaenRirnpq0mr3FUmuHY8ymYXn9to-MQIHq1MVM',
-    online: null,
-    bio: 'Researcher in AI ethics and responsible ML. Advises companies on bias auditing, fairness frameworks, and ethical AI deployment.',
-  },
-  {
-    id: '8',
-    name: 'Maya T.',
-    specialty: 'Career Coach',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBZOqoKHBL5fpr-xJ17x6ozPui7Lyj1uf-d0PwtkaYEfd9MlkKPeuQs575Ydj7AJdYM_h09seJAGWy_mcpJ4-uUvPOIfTpXghYUwLh6nAlCL9VWT6gOnAwM0xe3odnxlqjXGnWwMoXQDPsBmOsbPJNMVfNxEq_pqrvZa3lOrT_jZoeo_9Qcw9ComJmRylc9gWdzGELO-zKiUfEidJ_aVab1OlEwdx__RPoGaBo2RsC68QHuXDR8V1Nl4wolhuEyUnmwfUFGHwW1IhQa',
-    online: 'green',
-    bio: 'Career coach with 200+ success stories. Focuses on resume building, interview prep, and navigating tech career pivots.',
-  },
-  {
-    id: '9',
-    name: 'Omar D.',
-    specialty: 'Frontend',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAuAjXoIN4DreG104dep6Dg0g1zzXq2s1DJYUhZaByDjEYfNSAln1JRfioHlhMxPVtiA5sSEm1IwvOaNAbiDS0xPzM0RRd7g8lSBGlHmB1k-0rIknrkgLS3IFtKrVBv6XK8L-5nwmC58CaLpmc9J4P44lCsGnC2QO7dXV0os9QJeJk27ouj2XdYR88tIls6dB4NxBbBIMhqG6v94qvwCva3QXuWgFYbsFw200KTax9IFH7GbDqdHYVnqijEii72cNLQ_g3nJD6KOoiu',
-    online: null,
-    bio: 'Frontend specialist with a passion for pixel-perfect UI. Expert in React, animations, and design systems used at scale.',
-  },
-  {
-    id: '10',
-    name: 'Chloe S.',
-    specialty: 'Product',
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuC7y8b98JRo4CAtmyJUvOA_Ty87Gf3IdRfX4ILkh4DtaVvE2d2u65wETQijPCSJpnz0KDgaqV6ZIC5gqd2BMP8KL-xNFH8iS0ck9KAkcA4106bQoJInU8hT-GyYBMRITLiFEpS05coJgyfiryhIzCqO_NYoTOZ6QALQ6aN5PwBKbEk4i2RFYvp3X1_8prZt3B1ieXXGKcRDPoQka8vzeqbtNnm6b7OuI0fmuCNMWgYt_DlhFWv2VEfydQq9s0ab-lgtnAorVmmdFuiR',
-    online: null,
-    bio: 'Product strategist with a background in UX research. Mentors aspiring PMs on frameworks, metrics, and stakeholder management.',
-  },
-];
-
-
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  primary: '#5e7da0',
+  primary: '#4A6D8C',
   background: '#f1f5f9',
   card: '#ffffff',
   textDark: '#1e293b',
@@ -137,93 +43,369 @@ const COLORS = {
   green: '#34d399',
   yellow: '#fbbf24',
   border: '#e2e8f0',
-  headerBg: '#5e7da0',
-  tooltipBg: '#1e2a3a',
+  headerBg: '#4A6D8C',
+  tooltipBg: '#ffffff',
 };
 
-const CARD_WIDTH = (width - 40 - 16) / 3;
 const NUM_COLUMNS = 3;
+const CARD_WIDTH = (width - 40 - 16) / NUM_COLUMNS;
 
+// ─── Data ─────────────────────────────────────────────────────────────────────
+const MENTORS: Mentor[] = [
+  {
+    id: '1',
+    name: 'Marcus C.',
+    specialty: 'Full Stack',
+    avatar: 'https://randomuser.me/api/portraits/men/75.jpg',
+    online: null,
+    experience: '8 yrs @ Stripe',
+    skills: 'React & Node.js',
+    bio: '8 years building full-stack apps. Expert in React, Node.js, and cloud architecture. Helped 50+ engineers land senior roles.',
+  },
+  {
+    id: '2',
+    name: 'Lisa K.',
+    specialty: 'Product',
+    avatar: 'https://randomuser.me/api/portraits/women/65.jpg',
+    online: 'yellow',
+    experience: '6 yrs @ Notion',
+    skills: 'Roadmap Strategy',
+    bio: 'Product lead at two unicorn startups. Specializes in 0-to-1 products, user research, and roadmap strategy.',
+  },
+  {
+    id: '3',
+    name: 'James L.',
+    specialty: 'Marketing',
+    avatar: 'https://randomuser.me/api/portraits/men/46.jpg',
+    highlight: true,
+    online: null,
+    experience: '10 yrs @ HubSpot',
+    skills: 'SEO & Paid Ads',
+    bio: 'Growth marketing veteran with experience scaling B2B and B2C brands. Deep expertise in SEO, paid ads, and brand storytelling.',
+  },
+  {
+    id: '4',
+    name: 'Elena R.',
+    specialty: 'HR Consult',
+    avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
+    online: null,
+    experience: '12 yrs @ Deloitte',
+    skills: 'Career Transitions',
+    bio: 'Former HR director at Fortune 500 companies. Guides professionals on interviews, negotiations, and career transitions.',
+  },
+  {
+    id: '5',
+    name: 'Chris P.',
+    specialty: 'Mobile Dev',
+    avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
+    online: null,
+    experience: '6 yrs @ Airbnb',
+    skills: 'React Native & Swift',
+    bio: 'iOS & Android developer with 6 years shipping consumer apps. Specializes in React Native, Swift, and app store optimization.',
+  },
+  {
+    id: '6',
+    name: 'Nina J.',
+    specialty: 'DevOps',
+    avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
+    online: 'green',
+    experience: '7 yrs @ AWS',
+    skills: 'K8s & CI/CD',
+    bio: 'DevOps engineer specializing in Kubernetes, CI/CD pipelines, and cloud infrastructure. Currently available for mentoring sessions.',
+  },
+  {
+    id: '7',
+    name: 'Vikram S.',
+    specialty: 'AI Ethics',
+    avatar: 'https://randomuser.me/api/portraits/men/52.jpg',
+    online: null,
+    experience: '9 yrs @ DeepMind',
+    skills: 'Bias & Fairness',
+    bio: 'Researcher in AI ethics and responsible ML. Advises companies on bias auditing, fairness frameworks, and ethical AI deployment.',
+  },
+  {
+    id: '8',
+    name: 'Maya T.',
+    specialty: 'Career Coach',
+    avatar: 'https://randomuser.me/api/portraits/women/26.jpg',
+    online: 'green',
+    experience: '8 yrs @ LinkedIn',
+    skills: 'Interview Prep',
+    bio: 'Career coach with 200+ success stories. Focuses on resume building, interview prep, and navigating tech career pivots.',
+  },
+  {
+    id: '9',
+    name: 'Omar D.',
+    specialty: 'Frontend',
+    avatar: 'https://randomuser.me/api/portraits/men/67.jpg',
+    online: null,
+    experience: '5 yrs @ Figma',
+    skills: 'React & Design Sys',
+    bio: 'Frontend specialist with a passion for pixel-perfect UI. Expert in React, animations, and design systems used at scale.',
+  },
+  {
+    id: '10',
+    name: 'Chloe S.',
+    specialty: 'Product',
+    avatar: 'https://randomuser.me/api/portraits/women/33.jpg',
+    online: null,
+    experience: '7 yrs @ Spotify',
+    skills: 'UX Research',
+    bio: 'Product strategist with a background in UX research. Mentors aspiring PMs on frameworks, metrics, and stakeholder management.',
+  },
+  {
+    id: '11',
+    name: 'Dr. Alex R.',
+    specialty: 'Data Science',
+    avatar: 'https://randomuser.me/api/portraits/men/43.jpg',
+    online: 'green',
+    experience: '10+ yrs @ Google',
+    skills: 'ML & Analytics',
+    bio: 'Lead data scientist at Google. Expert in machine learning, statistical modeling, and data-driven product decisions.',
+  },
+  {
+    id: '12',
+    name: 'Sarah W.',
+    specialty: 'UX Design',
+    avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
+    online: 'yellow',
+    experience: '8 yrs @ Apple',
+    skills: 'Figma & Prototyping',
+    bio: 'Senior UX designer at Apple. Passionate about accessible, intuitive design and mentoring early-career designers.',
+  },
+  {
+    id: '13',
+    name: 'Raj M.',
+    specialty: 'Backend',
+    avatar: 'https://randomuser.me/api/portraits/men/88.jpg',
+    online: null,
+    experience: '9 yrs @ Netflix',
+    skills: 'Java & Microservices',
+    bio: 'Backend engineer with deep expertise in distributed systems, microservices, and high-throughput APIs at Netflix scale.',
+  },
+  {
+    id: '14',
+    name: 'Priya N.',
+    specialty: 'Blockchain',
+    avatar: 'https://randomuser.me/api/portraits/women/57.jpg',
+    online: null,
+    experience: '6 yrs @ Coinbase',
+    skills: 'Solidity & Web3',
+    bio: 'Blockchain developer at Coinbase. Guides developers into Web3, smart contracts, and decentralized finance.',
+  },
+  {
+    id: '15',
+    name: 'Tom B.',
+    specialty: 'Security',
+    avatar: 'https://randomuser.me/api/portraits/men/22.jpg',
+    online: 'green',
+    experience: '11 yrs @ Cloudflare',
+    skills: 'Pen Testing & OWASP',
+    bio: 'Cybersecurity expert with 11 years in ethical hacking, secure architecture, and compliance at major tech firms.',
+  },
+];
 
-
-// ─── Tooltip ──────────────────────────────────────────────────────────────────
+// ─── Rich Tooltip (matches Image 2 design) ────────────────────────────────────
 interface TooltipProps {
   visible: boolean;
-  bio: string;
+  mentor: Mentor | null;
   onClose: () => void;
-  position: { x: number; y: number; width: number };
+  position: { x: number; y: number; cardWidth: number };
 }
 
-const Tooltip = ({ visible, bio, onClose, position }: TooltipProps) => {
+const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const scaleAnim = useRef(new Animated.Value(0.88)).current;
 
   React.useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true, speed: 20 }),
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }),
+        Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 4 }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 4 }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.85, duration: 150, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.88, duration: 140, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
 
-  if (!visible) return null;
+  if (!visible || !mentor) return null;
 
-  const tooltipWidth = 190;
-  // Center tooltip over the card, clamped within screen bounds
-  let tooltipLeft = position.x + position.width / 2 - tooltipWidth / 2;
-  tooltipLeft = Math.max(12, Math.min(tooltipLeft, width - tooltipWidth - 12));
-  const arrowLeft = position.x + position.width / 2 - tooltipLeft - 7;
+  const tooltipWidth = 200;
+  let left = position.x + position.cardWidth / 2 - tooltipWidth / 2;
+  left = Math.max(12, Math.min(left, width - tooltipWidth - 12));
+  const arrowLeft = position.x + position.cardWidth / 2 - left - 8;
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.tooltipOverlay} onPress={onClose}>
+      <Pressable style={tooltipStyles.overlay} onPress={onClose}>
         <Animated.View
           style={[
-            styles.tooltipBox,
+            tooltipStyles.box,
             {
               top: position.y,
-              left: tooltipLeft,
+              left,
               width: tooltipWidth,
               opacity: fadeAnim,
               transform: [{ scale: scaleAnim }],
             },
           ]}
         >
-          <Text style={styles.tooltipText}>{bio}</Text>
-          {/* Downward pointing arrow */}
-          <View style={[styles.tooltipArrow, { left: arrowLeft }]} />
+          {/* Header row: avatar + name + specialty */}
+          <View style={tooltipStyles.headerRow}>
+            <Image source={{ uri: mentor.avatar }} style={tooltipStyles.avatar} />
+            <View style={tooltipStyles.headerText}>
+              <Text style={tooltipStyles.name}>{mentor.name}</Text>
+              <Text style={tooltipStyles.specialty}>{mentor.specialty}</Text>
+            </View>
+          </View>
+
+          {/* Experience line */}
+          {mentor.experience && (
+            <View style={tooltipStyles.infoRow}>
+              <Text style={tooltipStyles.starIcon}>⭐</Text>
+              <Text style={tooltipStyles.infoText}>{mentor.experience}</Text>
+            </View>
+          )}
+
+          {/* Skills line */}
+          {mentor.skills && (
+            <View style={tooltipStyles.infoRow}>
+              <Text style={tooltipStyles.chartIcon}>📊</Text>
+              <Text style={[tooltipStyles.infoText, tooltipStyles.skillText]}>{mentor.skills}</Text>
+            </View>
+          )}
+
+          {/* Divider */}
+          <View style={tooltipStyles.divider} />
+
+          {/* View Profile button */}
+          <TouchableOpacity style={tooltipStyles.viewBtn} onPress={onClose}>
+            <Text style={tooltipStyles.viewBtnText}>View Profile</Text>
+          </TouchableOpacity>
+
+          {/* Downward arrow */}
+          <View style={[tooltipStyles.arrow, { left: arrowLeft }]} />
         </Animated.View>
       </Pressable>
     </Modal>
   );
 };
 
+const tooltipStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  box: {
+    position: 'absolute',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: `${'#4A6D8C'}33`,
+  },
+  headerText: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  specialty: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  starIcon: {
+    fontSize: 13,
+  },
+  chartIcon: {
+    fontSize: 13,
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#1e293b',
+    fontWeight: '500',
+  },
+  skillText: {
+    color: '#4A6D8C',
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 10,
+  },
+  viewBtn: {
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#4A6D8C',
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  viewBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4A6D8C',
+  },
+  arrow: {
+    position: 'absolute',
+    bottom: -7,
+    width: 14,
+    height: 14,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#e2e8f0',
+    transform: [{ rotate: '45deg' }],
+  },
+});
+
 // ─── Mentor Card ──────────────────────────────────────────────────────────────
-const MentorCard = ({ mentor }: { mentor: Mentor }) => {
+interface MentorCardProps {
+  mentor: Mentor;
+  onLongPress: (mentor: Mentor, pos: { x: number; y: number; cardWidth: number }) => void;
+}
+
+const MentorCard = ({ mentor, onLongPress }: MentorCardProps) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const cardRef = useRef<View>(null);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0, width: 0 });
-
-  const specialtyColor =
-    ['Full Stack', 'DevOps', 'Frontend'].includes(mentor.specialty)
-      ? COLORS.primary
-      : COLORS.textLight;
 
   const handleLongPress = () => {
     if (!mentor.bio) return;
     cardRef.current?.measureInWindow((x, y, cardWidth, cardHeight) => {
-      // Position tooltip above the card with a small gap
-      setTooltipPosition({ x, y: y - 95, width: cardWidth });
-      setTooltipVisible(true);
+      onLongPress(mentor, { x, y: y - 185, cardWidth });
     });
-    // Subtle pulse animation
     Animated.sequence([
       Animated.spring(scaleAnim, { toValue: 0.91, useNativeDriver: true, speed: 30 }),
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }),
@@ -231,57 +413,41 @@ const MentorCard = ({ mentor }: { mentor: Mentor }) => {
   };
 
   return (
-    <>
-      <Animated.View
-        ref={cardRef}
-        style={[
-          styles.mentorCard,
-          mentor.highlight && styles.mentorCardHighlight,
-          { transform: [{ scale: scaleAnim }] },
-        ]}
+    <Animated.View
+      ref={cardRef}
+      style={[
+        styles.mentorCard,
+        mentor.highlight && styles.mentorCardHighlight,
+        { transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <TouchableOpacity
+        style={styles.mentorCardInner}
+        onPressIn={() =>
+          Animated.spring(scaleAnim, { toValue: 0.94, useNativeDriver: true }).start()
+        }
+        onPressOut={() =>
+          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start()
+        }
+        onLongPress={handleLongPress}
+        delayLongPress={350}
+        activeOpacity={1}
       >
-        <TouchableOpacity
-          style={styles.mentorCardInner}
-          onPressIn={() =>
-            Animated.spring(scaleAnim, { toValue: 0.94, useNativeDriver: true }).start()
-          }
-          onPressOut={() =>
-            Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start()
-          }
-          onLongPress={handleLongPress}
-          delayLongPress={350}
-          activeOpacity={1}
-        >
-          <View style={styles.avatarWrapper}>
-            <Image source={{ uri: mentor.avatar }} style={styles.mentorAvatar} />
-            {mentor.online && (
-              <View
-                style={[
-                  styles.onlineDot,
-                  {
-                    backgroundColor:
-                      mentor.online === 'green' ? COLORS.green : COLORS.yellow,
-                  },
-                ]}
-              />
-            )}
-          </View>
-          <Text style={styles.mentorName} numberOfLines={1}>
-            {mentor.name}
-          </Text>
-          <Text style={[styles.mentorSpecialty, { color: specialtyColor }]} numberOfLines={1}>
-            {mentor.specialty}
-          </Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      <Tooltip
-        visible={tooltipVisible}
-        bio={mentor.bio || ''}
-        onClose={() => setTooltipVisible(false)}
-        position={tooltipPosition}
-      />
-    </>
+        <View style={styles.avatarWrapper}>
+          <Image source={{ uri: mentor.avatar }} style={styles.mentorAvatar} />
+          {mentor.online && (
+            <View
+              style={[
+                styles.onlineDot,
+                { backgroundColor: mentor.online === 'green' ? COLORS.green : COLORS.yellow },
+              ]}
+            />
+          )}
+        </View>
+        <Text style={styles.mentorName} numberOfLines={1}>{mentor.name}</Text>
+        <Text style={styles.mentorSpecialty} numberOfLines={1}>{mentor.specialty}</Text>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
@@ -289,6 +455,15 @@ const MentorCard = ({ mentor }: { mentor: Mentor }) => {
 const AllSeniorsScreen = () => {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
+  const [tooltipMentor, setTooltipMentor] = useState<Mentor | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, cardWidth: 0 });
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+
+  const handleLongPress = (mentor: Mentor, pos: { x: number; y: number; cardWidth: number }) => {
+    setTooltipMentor(mentor);
+    setTooltipPos(pos);
+    setTooltipVisible(true);
+  };
 
   const filteredMentors = MENTORS.filter(
     m =>
@@ -296,6 +471,7 @@ const AllSeniorsScreen = () => {
       m.specialty.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  // Pad to fill last row
   const paddedMentors = [...filteredMentors];
   const remainder = paddedMentors.length % NUM_COLUMNS;
   if (remainder !== 0) {
@@ -305,16 +481,14 @@ const AllSeniorsScreen = () => {
   }
 
   const renderMentor = ({ item }: { item: Mentor }) => {
-    if (!item.name) {
-      return <View style={styles.mentorCardPlaceholder} />;
-    }
-    return <MentorCard mentor={item} />;
+    if (!item.name) return <View style={styles.mentorCardPlaceholder} />;
+    return <MentorCard mentor={item} onLongPress={handleLongPress} />;
   };
 
   const ListHeader = () => (
     <>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>All Mentors</Text>
+        <Text style={styles.sectionTitle}>All Profiles</Text>
         <Text style={styles.mentorCount}>{filteredMentors.length} available</Text>
       </View>
       <Text style={styles.longPressHint}>Hold a card to see a quick bio</Text>
@@ -322,27 +496,24 @@ const AllSeniorsScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.headerBg} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerIconBtn}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backArrow}>‹</Text>
+        <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
+          <Icon name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Top Mentors</Text>
+        <Text style={styles.headerTitle}>Top Profiles</Text>
         <TouchableOpacity style={styles.headerIconBtn}>
-          <Text style={styles.filterIcon}>⚙</Text>
+          <Icon name="tune" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
       {/* ── Search Bar ── */}
       <View style={styles.searchBarWrapper}>
         <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Icon name="search" size={18} color={COLORS.textLight} style={{ marginRight: 8 }} />
           <TextInput
             style={styles.searchInput}
             placeholder="Find your next guide..."
@@ -352,13 +523,13 @@ const AllSeniorsScreen = () => {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.clearBtn}>✕</Text>
+              <Icon name="close" size={16} color={COLORS.textLight} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* ── Content ── */}
+      {/* ── Grid ── */}
       <FlatList
         data={paddedMentors}
         keyExtractor={item => item.id}
@@ -375,6 +546,14 @@ const AllSeniorsScreen = () => {
       <TouchableOpacity style={styles.fab} activeOpacity={0.85}>
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
+
+      {/* ── Rich Tooltip ── */}
+      <RichTooltip
+        visible={tooltipVisible}
+        mentor={tooltipMentor}
+        onClose={() => setTooltipVisible(false)}
+        position={tooltipPos}
+      />
     </SafeAreaView>
   );
 };
@@ -395,8 +574,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 10 : 4,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'android' ? 16 : 12,
+    paddingBottom: 14,
   },
   headerIconBtn: {
     width: 40,
@@ -406,16 +585,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backArrow: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '400',
-    lineHeight: 32,
-  },
-  filterIcon: {
-    color: '#fff',
-    fontSize: 18,
-  },
   headerTitle: {
     color: '#fff',
     fontSize: 20,
@@ -423,39 +592,30 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Search Bar
+  // Search
   searchBarWrapper: {
     backgroundColor: COLORS.headerBg,
     paddingHorizontal: 20,
-    paddingBottom: 28,
+    paddingBottom: 24,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.card,
     borderRadius: 30,
-    height: 52,
-    paddingHorizontal: 16,
+    height: 46,
+    paddingHorizontal: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
   },
-  searchIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.textDark,
     padding: 0,
-  },
-  clearBtn: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    paddingHorizontal: 4,
   },
 
   // FlatList
@@ -469,12 +629,12 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
 
-  // Section Headers
+  // Section header
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
     marginTop: 4,
   },
   sectionTitle: {
@@ -491,11 +651,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textLight,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     fontStyle: 'italic',
   },
 
-  // Mentor Grid
+  // Grid
   mentorRow: {
     gap: 8,
     marginBottom: 8,
@@ -513,7 +673,7 @@ const styles = StyleSheet.create({
   },
   mentorCardHighlight: {
     borderWidth: 1.5,
-    borderColor: 'rgba(94,125,160,0.2)',
+    borderColor: 'rgba(74,109,140,0.25)',
   },
   mentorCardPlaceholder: {
     width: CARD_WIDTH,
@@ -527,9 +687,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   mentorAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: `${'#4A6D8C'}22`,
   },
   onlineDot: {
     position: 'absolute',
@@ -552,40 +714,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
     fontWeight: '500',
-  },
-
-  // Tooltip
-  tooltipOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  tooltipBox: {
-    position: 'absolute',
-    backgroundColor: COLORS.tooltipBg,
-    borderRadius: 12,
-    paddingHorizontal: 13,
-    paddingTop: 10,
-    paddingBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  tooltipText: {
-    color: '#e2e8f0',
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'center',
-    fontWeight: '400',
-  },
-  tooltipArrow: {
-    position: 'absolute',
-    bottom: -6,
-    width: 14,
-    height: 14,
-    backgroundColor: COLORS.tooltipBg,
-    transform: [{ rotate: '45deg' }],
+    color: COLORS.textLight,
   },
 
   // FAB
@@ -601,7 +730,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
     zIndex: 40,
