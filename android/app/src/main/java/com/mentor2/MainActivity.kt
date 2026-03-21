@@ -1,22 +1,21 @@
 package com.mentor2
 
-import com.facebook.react.ReactActivity
-import com.facebook.react.ReactActivityDelegate
-import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
-import com.facebook.react.defaults.DefaultReactActivityDelegate
+import android.app.Activity
+import android.os.Bundle
+import android.widget.TextView
+import android.graphics.Color
+import android.view.Gravity
 
-class MainActivity : ReactActivity() {
-
-  /**
-   * Returns the name of the main component registered from JavaScript. This is used to schedule
-   * rendering of the component.
-   */
-  override fun getMainComponentName(): String = "Vconnect"
-
-  /**
-   * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
-   * which allows you to enable New Architecture with a single boolean flags [fabricEnabled]
-   */
-  override fun createReactActivityDelegate(): ReactActivityDelegate =
-      DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+class MainActivity : Activity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    
+    val textView = TextView(this)
+    textView.text = "Vconnect - App is running!"
+    textView.textSize = 32f
+    textView.setTextColor(Color.BLACK)
+    textView.setGravity(Gravity.CENTER)
+    
+    setContentView(textView)
+  }
 }
