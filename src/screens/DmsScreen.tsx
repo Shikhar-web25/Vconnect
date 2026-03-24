@@ -1,50 +1,98 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ChatListItem from '../components/dm/ChatListItem';
 import DmHeader from '../components/dm/DmHeader';
 import { RootStackParamList } from '../navigation/AuthNavigator';
+import { supabase } from '../../supabaseClient';
 
 const DmsScreen = () => {
-    // Mock Data based on the image
-    const chats = [
-        {
-            id: '1',
-            name: 'Rafael Mante',
-            message: "I've reviewed your graph theory logic...",
-            time: '19:45',
-            avatar: 'https://i.pravatar.cc/150?img=11',
-            unreadCount: 0,
-        },
-        {
-            id: '2',
-            name: 'Katherine Bernhard',
-            message: '✓ Let\'s schedule the organic chem...',
-            time: '19:40',
-            avatar: 'https://i.pravatar.cc/150?img=5',
-            unreadCount: 2,
-        },
-        {
-            id: '3',
-            name: 'Terrence Lemke',
-            message: 'Your integration parts are correct now.',
-            time: '19:32',
-            avatar: 'https://i.pravatar.cc/150?img=3',
-            unreadCount: 0,
-        },
-        {
-            id: '4',
-            name: 'Alyssa Wisozk-Kihn',
-            message: 'Did you see the new notes?',
-            time: '18:15',
-            avatar: 'https://i.pravatar.cc/150?img=1', // Placeholder color avatar in image, utilizing available image for now
-            unreadCount: 1,
-        },
-    ];
+    const [chats, setChats] = useState<Array<{
+        id: string;
+        name: string;
+        message: string;
+        time: string;
+        avatar: string;
+        unreadCount?: number;
+    }>>([]);
+    const [loading, setLoading] = useState(true);
+    const [currentUserName, setCurrentUserName] = useState('Student');
 
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+    useEffect(() => {
+        loadChats();
+    }, []);
+
+    const formatTime = (isoDate?: string | null) => {
+        if (!isoDate) return '';
+        const date = new Date(isoDate);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const loadChats = async () => {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, username')
+            .eq('id', user.id)
+            .single();
+
+        setCurrentUserName(profile?.full_name ?? profile?.username ?? 'Student');
+
+        const { data: conversations, error } = await supabase
+            .from('conversations')
+            .select('id, user1, user2, last_message, last_message_at')
+            .or(`user1.eq.${user.id},user2.eq.${user.id}`)
+            .order('last_message_at', { ascending: false })
+            .limit(200);
+
+        if (error || !conversations) {
+            setLoading(false);
+            return;
+        }
+
+        const otherIds = conversations.map((conv: any) =>
+            conv.user1 === user.id ? conv.user2 : conv.user1
+        );
+        if (otherIds.length === 0) {
+            setChats([]);
+            setLoading(false);
+            return;
+        }
+
+        const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, username, avatar_url')
+            .in('id', otherIds);
+
+        const profileMap = new Map<string, any>();
+        (profiles ?? []).forEach((p: any) => profileMap.set(p.id, p));
+
+        const mapped = otherIds.map((id, index) => {
+            const convo = conversations[index];
+            const profileData = profileMap.get(id);
+            return {
+                id,
+                name: profileData?.full_name ?? profileData?.username ?? 'Student',
+                message: convo?.last_message ?? '',
+                time: formatTime(convo?.last_message_at),
+                avatar: profileData?.avatar_url ?? 'https://i.pravatar.cc/150?img=12',
+                unreadCount: 0,
+            };
+        });
+
+        setChats(mapped);
+        setLoading(false);
+    };
 
     const handlePress = (id: string) => {
         const chat = chats.find(c => c.id === id);
@@ -59,7 +107,7 @@ const DmsScreen = () => {
 
     return (
         <View style={styles.container}>
-            <DmHeader />
+            <DmHeader name={currentUserName} unreadCount={0} />
 
             <View style={styles.contentContainer}>
                 <View style={styles.listHeader}>
@@ -87,6 +135,18 @@ const DmsScreen = () => {
                     )}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        loading ? (
+                            <View style={styles.emptyState}>
+                                <ActivityIndicator size="small" color="#4A6D8C" />
+                                <Text style={styles.emptyText}>Loading conversations...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No messages yet.</Text>
+                            </View>
+                        )
+                    }
                 />
             </View>
         </View>
@@ -154,6 +214,15 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingBottom: 20,
+    },
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: 40,
+    },
+    emptyText: {
+        marginTop: 10,
+        color: '#94A3B8',
+        fontSize: 14,
     },
 });
 

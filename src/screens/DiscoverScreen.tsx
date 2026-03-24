@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,45 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { COLORS } from "../theme/colors";
 import MentorAvatar from "../components/discover/MentorAvatar";
 import OpportunityCard from "../components/discover/OpportunityCard";
+import { supabase } from "../../supabaseClient";
 
 const DiscoverScreen = () => {
+  const [mentors, setMentors] = useState<Array<{ id: string; name: string; image?: string }>>([]);
+  const [loadingMentors, setLoadingMentors] = useState(true);
+
+  useEffect(() => {
+    loadMentors();
+  }, []);
+
+  const loadMentors = async () => {
+    setLoadingMentors(true);
+    const { data, error } = await supabase
+      .from('mentors')
+      .select('id, expertise, experience, year, description, profiles (id, full_name, username, avatar_url)')
+      .order('year', { ascending: false })
+      .limit(12);
+
+    if (!error) {
+      const mapped = (data ?? []).map((row: any) => {
+        const profile = row?.profiles ?? null;
+        const name = profile?.full_name ?? profile?.username ?? 'Mentor';
+        return {
+          id: row.id,
+          name,
+          image: profile?.avatar_url ?? undefined,
+        };
+      });
+      setMentors(mapped);
+    }
+    setLoadingMentors(false);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4A6D8C" />
@@ -43,19 +74,20 @@ const DiscoverScreen = () => {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <MentorAvatar
-              name="Dr. Alex"
-              image="https://randomuser.me/api/portraits/men/32.jpg"
-            />
-            <MentorAvatar
-              name="Sarah W."
-              image="https://randomuser.me/api/portraits/women/44.jpg"
-            />
-            <MentorAvatar
-              name="Marcus C."
-              image="https://randomuser.me/api/portraits/men/75.jpg"
-            />
-            <MentorAvatar name="See More" />
+            {loadingMentors && (
+              <View style={styles.mentorLoading}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.mentorLoadingText}>Loading mentors...</Text>
+              </View>
+            )}
+            {!loadingMentors && mentors.map((mentor) => (
+              <MentorAvatar
+                key={mentor.id}
+                name={mentor.name}
+                image={mentor.image}
+              />
+            ))}
+            {!loadingMentors && <MentorAvatar name="See More" />}
           </ScrollView>
 
           {/* FEED */}
@@ -147,6 +179,17 @@ const styles = StyleSheet.create({
   mentorScroll: {
     paddingLeft: 20,
     paddingBottom: 24, // Space for avatar shadows if needed
+  },
+  mentorLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  mentorLoadingText: {
+    marginLeft: 10,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   feed: {
     backgroundColor: '#F8FAFC', // Very light slate gray

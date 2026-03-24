@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/login/app/login';
 import SignupScreen from '../screens/login/app/signup';
 import ForgotPasswordScreen from '../screens/login/app/forgot-password';
-import SplashScreen from '../screens/Splashscreen';
+import SplashScreen from '../screens/SplashScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import AdminDashboard from '../screens/_admin/AdminDashboard';
@@ -21,10 +21,7 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const AuthNavigator = () => {
-  // TODO: Add authentication state logic here
-  // For now, we'll always show login first
-  const isAuthenticated = false;
+const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean }) => {
 
   return (
     <Stack.Navigator

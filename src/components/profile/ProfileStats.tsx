@@ -5,7 +5,13 @@ import { Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
-const ProfileStats = () => {
+const ProfileStats = ({
+    questionsAsked = 0,
+    answersProvided = 0,
+}: {
+    questionsAsked?: number;
+    answersProvided?: number;
+}) => {
     return (
         <View style={styles.container}>
             <Text style={styles.sectionHeader}>ENGAGEMENT ACTIVITY</Text>
@@ -13,13 +19,13 @@ const ProfileStats = () => {
             <View style={styles.statsRow}>
                 <View style={[styles.statCard, styles.blueCard]}>
                     <Icon name="message-text-outline" size={28} color="#fff" style={styles.statIcon} />
-                    <Text style={styles.statNumberLight}>128</Text>
+                    <Text style={styles.statNumberLight}>{questionsAsked}</Text>
                     <Text style={styles.statLabelLight}>QUESTIONS ASKED</Text>
                 </View>
 
                 <View style={[styles.statCard, styles.whiteCard]}>
                     <Icon name="message-reply-text-outline" size={28} color="#4A6D8C" style={styles.statIcon} />
-                    <Text style={styles.statNumberDark}>4.2k</Text>
+                    <Text style={styles.statNumberDark}>{answersProvided}</Text>
                     <Text style={styles.statLabelDark}>ANSWERS PROVIDED</Text>
                 </View>
             </View>

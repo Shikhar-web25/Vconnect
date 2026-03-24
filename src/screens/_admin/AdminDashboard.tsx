@@ -1,910 +1,870 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   Alert,
-  Animated,
-  Easing,
-  TextInput,
-  Modal,
-  Dimensions,
-} from "react-native";
-import { supabase } from "../../../supabaseClient";
-import { Search, Shield, User, Activity, Ban, CheckCircle, X } from "lucide-react-native";
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { supabase } from '../../../supabaseClient';
+import { ADMIN_EMAIL, isAdminEmail } from '../../constants/admin';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+type Props = NativeStackScreenProps<any>;
+type AdminTab = 'overview' | 'users' | 'posts';
 
-type Profile = {
+type OverviewStats = {
+  totalUsers: number;
+  mentorsAndAdmins: number;
+  totalPosts: number;
+  totalComments: number;
+  newUsersThisWeek: number;
+  newPostsThisWeek: number;
+};
+
+type AdminUser = {
   id: string;
-  email: string;
-  role: string;
-  role_level: number;
-  is_banned: boolean;
-  full_name?: string;
-  created_at?: string;
+  full_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+  branch?: string | null;
+  year_of_study?: number | null;
+  role_level?: number | null;
+  created_at?: string | null;
 };
 
-// ---------------------------------------------------------------------------
-// Matrix Rain Particle
-// ---------------------------------------------------------------------------
-const MatrixParticle: React.FC<{ delay: number; column: number }> = ({ delay, column }) => {
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.parallel([
-          Animated.timing(opacity, {
-            toValue: 0.4,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(translateY, {
-            toValue: SCREEN_HEIGHT + 100,
-            duration: 8000 + Math.random() * 4000,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const chars = "01アイウエオカキクケコサシスセソABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const char = chars[Math.floor(Math.random() * chars.length)];
-
-  return (
-    <Animated.Text
-      style={[
-        styles.matrixChar,
-        {
-          left: column * 20,
-          opacity,
-          transform: [{ translateY }],
-        },
-      ]}
-    >
-      {char}
-    </Animated.Text>
-  );
+type AdminPost = {
+  id: string;
+  title?: string | null;
+  content?: string | null;
+  created_at?: string | null;
+  likes_count?: number | null;
+  comments_count?: number | null;
+  user_id?: string | null;
+  profile?: {
+    id?: string | null;
+    full_name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
 };
 
-// ---------------------------------------------------------------------------
-// Glitch Text Effect
-// ---------------------------------------------------------------------------
-const GlitchText: React.FC<{ text: string }> = ({ text }) => {
-  const glitchAnim = useRef(new Animated.Value(0)).current;
+const DEFAULT_STATS: OverviewStats = {
+  totalUsers: 0,
+  mentorsAndAdmins: 0,
+  totalPosts: 0,
+  totalComments: 0,
+  newUsersThisWeek: 0,
+  newPostsThisWeek: 0,
+};
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glitchAnim, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.delay(3000),
-      ])
-    ).start();
-  }, []);
+const TABS: { key: AdminTab; label: string; icon: string }[] = [
+  { key: 'overview', label: 'Overview', icon: 'view-dashboard-outline' },
+  { key: 'users', label: 'Students', icon: 'account-group-outline' },
+  { key: 'posts', label: 'Posts', icon: 'post-outline' },
+];
 
-  const glitchTranslate = glitchAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 2],
+const formatDate = (value?: string | null) => {
+  if (!value) return 'Unknown';
+
+  return new Date(value).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   });
-
-  return (
-    <View style={styles.glitchContainer}>
-      <Text style={styles.glitchTitle}>{text}</Text>
-      <Animated.Text
-        style={[
-          styles.glitchTitle,
-          styles.glitchLayer1,
-          { transform: [{ translateX: glitchTranslate }] },
-        ]}
-      >
-        {text}
-      </Animated.Text>
-      <Animated.Text
-        style={[
-          styles.glitchTitle,
-          styles.glitchLayer2,
-          { transform: [{ translateX: Animated.multiply(glitchTranslate, -1) }] },
-        ]}
-      >
-        {text}
-      </Animated.Text>
-    </View>
-  );
 };
 
-// ---------------------------------------------------------------------------
-// Scan Line Overlay
-// ---------------------------------------------------------------------------
-const ScanLine: React.FC = () => {
-  const translateY = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(translateY, {
-        toValue: SCREEN_HEIGHT,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
-
-  return (
-    <Animated.View
-      style={[
-        styles.scanLine,
-        { transform: [{ translateY }] },
-      ]}
-    />
-  );
+const formatYear = (year?: number | null) => {
+  if (!year) return 'Year hidden';
+  if (year === 1) return '1st Year';
+  if (year === 2) return '2nd Year';
+  if (year === 3) return '3rd Year';
+  return `${year}th Year`;
 };
 
-// ---------------------------------------------------------------------------
-// Stats Card
-// ---------------------------------------------------------------------------
-const StatsCard: React.FC<{ icon: any; label: string; value: number; color: string }> = ({
-  icon: Icon,
-  label,
-  value,
-  color,
-}) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+const getRoleMeta = (roleLevel?: number | null) => {
+  if ((roleLevel ?? 0) >= 2) {
+    return {
+      label: 'Admin',
+      backgroundColor: '#FEE2E2',
+      color: '#991B1B',
+      borderColor: '#FCA5A5',
+    };
+  }
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
+  if ((roleLevel ?? 0) >= 1) {
+    return {
+      label: 'Mentor',
+      backgroundColor: '#DCFCE7',
+      color: '#166534',
+      borderColor: '#86EFAC',
+    };
+  }
 
-  return (
-    <Animated.View
-      style={[
-        styles.statsCard,
-        { borderColor: color, transform: [{ scale: pulseAnim }] },
-      ]}
-    >
-      <Icon size={24} color={color} />
-      <Text style={styles.statsValue}>{value}</Text>
-      <Text style={styles.statsLabel}>{label}</Text>
-    </Animated.View>
-  );
+  return {
+    label: 'Student',
+    backgroundColor: '#DBEAFE',
+    color: '#1D4ED8',
+    borderColor: '#93C5FD',
+  };
 };
 
-// ---------------------------------------------------------------------------
-// User Detail Modal
-// ---------------------------------------------------------------------------
-const UserDetailModal: React.FC<{
-  visible: boolean;
-  user: Profile | null;
-  onClose: () => void;
-  onRoleChange: (userId: string, newLevel: number) => void;
-}> = ({ visible, user, onClose, onRoleChange }) => {
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        friction: 8,
-        tension: 50,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      slideAnim.setValue(SCREEN_HEIGHT);
-    }
-  }, [visible]);
-
-  if (!user) return null;
-
-  const roleOptions = [
-    { label: "User", level: 0, color: "#64748B" },
-    { label: "Moderator", level: 5, color: "#3B82F6" },
-    { label: "Admin", level: 8, color: "#8B5CF6" },
-    { label: "Super Admin", level: 10, color: "#EF4444" },
-  ];
-
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <Animated.View
-          style={[
-            styles.modalContent,
-            { transform: [{ translateY: slideAnim }] },
-          ]}
-        >
-          <View style={styles.modalHeader}>
-            <Shield size={24} color="#00FF41" />
-            <Text style={styles.modalTitle}>User Details</Text>
-            <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-              <X size={24} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.modalBody}>
-            <Text style={styles.modalLabel}>Email</Text>
-            <Text style={styles.modalValue}>{user.email}</Text>
-
-            <Text style={styles.modalLabel}>Full Name</Text>
-            <Text style={styles.modalValue}>{user.full_name || "N/A"}</Text>
-
-            <Text style={styles.modalLabel}>Current Role</Text>
-            <Text style={[styles.modalValue, { color: "#00FF41" }]}>
-              {user.role} (Level {user.role_level})
-            </Text>
-
-            <Text style={styles.modalLabel}>Change Role</Text>
-            <View style={styles.roleOptions}>
-              {roleOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.level}
-                  style={[
-                    styles.roleOption,
-                    {
-                      borderColor: option.color,
-                      backgroundColor:
-                        user.role_level === option.level
-                          ? `${option.color}33`
-                          : "transparent",
-                    },
-                  ]}
-                  onPress={() => {
-                    Alert.alert(
-                      "Change Role",
-                      `Set ${user.email} to ${option.label}?`,
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Confirm",
-                          onPress: () => onRoleChange(user.id, option.level),
-                        },
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={[styles.roleOptionText, { color: option.color }]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Main Admin Dashboard
-// ---------------------------------------------------------------------------
-export default function AdminDashboard() {
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<Profile[]>([]);
+export default function AdminDashboard({ navigation }: Props) {
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<OverviewStats>(DEFAULT_STATS);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [posts, setPosts] = useState<AdminPost[]>([]);
 
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const headerStats = useMemo(
+    () => [
+      {
+        label: 'Students',
+        value: stats.totalUsers,
+        accent: '#38BDF8',
+        icon: 'account-multiple-outline',
+      },
+      {
+        label: 'Posts',
+        value: stats.totalPosts,
+        accent: '#34D399',
+        icon: 'post-outline',
+      },
+      {
+        label: 'Comments',
+        value: stats.totalComments,
+        accent: '#FBBF24',
+        icon: 'message-outline',
+      },
+      {
+        label: 'Mentors',
+        value: stats.mentorsAndAdmins,
+        accent: '#F472B6',
+        icon: 'star-four-points-outline',
+      },
+    ],
+    [stats],
+  );
 
   useEffect(() => {
-    loadUsers();
-
-    // Shimmer animation
-    Animated.loop(
-      Animated.timing(shimmerAnim, {
-        toValue: 1,
-        duration: 2000,
-        easing: Easing.linear,
-        useNativeDriver: false,
-      })
-    ).start();
+    verifyAdminAccess();
   }, []);
 
-  useEffect(() => {
-    if (searchQuery) {
-      setFilteredUsers(
-        users.filter(
-          (u) =>
-            u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      );
-    } else {
-      setFilteredUsers(users);
+  const verifyAdminAccess = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const allowed = isAdminEmail(user?.email);
+      setAuthorized(allowed);
+      setCheckingAccess(false);
+
+      if (!allowed) {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Main');
+        }
+        return;
+      }
+
+      await loadDashboard(true);
+    } catch (error) {
+      setCheckingAccess(false);
+      setAuthorized(false);
+      console.warn('Admin access check failed:', error);
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Main');
+      }
     }
-  }, [searchQuery, users]);
-
-  const loadUsers = async () => {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,email,role,role_level,is_banned,full_name,created_at")
-      .order("role_level", { ascending: false });
-
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      setUsers(data || []);
-      setFilteredUsers(data || []);
-    }
-
-    setLoading(false);
   };
 
-  const toggleBan = async (user: Profile) => {
-    Alert.alert(user.is_banned ? "Unban user?" : "Ban user?", user.email, [
-      { text: "Cancel", style: "cancel" },
+  const loadDashboard = async (showLoader = false) => {
+    if (showLoader) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      const [
+        usersCountResult,
+        mentorsCountResult,
+        postsCountResult,
+        commentsCountResult,
+        newUsersResult,
+        newPostsResult,
+        usersResult,
+        postsResult,
+      ] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('role_level', 1),
+        supabase.from('posts').select('id', { count: 'exact', head: true }),
+        supabase.from('comments').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
+        supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
+        supabase
+          .from('profiles')
+          .select('id, full_name, username, email, branch, year_of_study, role_level, created_at')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('posts')
+          .select(
+            'id, title, content, created_at, likes_count, comments_count, user_id, profiles:profiles!posts_user_id_fkey(id, full_name, username, email)',
+          )
+          .order('created_at', { ascending: false })
+          .limit(30),
+      ]);
+
+      if (usersResult.error) throw usersResult.error;
+      if (postsResult.error) throw postsResult.error;
+
+      setStats({
+        totalUsers: usersCountResult.count ?? 0,
+        mentorsAndAdmins: mentorsCountResult.count ?? 0,
+        totalPosts: postsCountResult.count ?? 0,
+        totalComments: commentsCountResult.count ?? 0,
+        newUsersThisWeek: newUsersResult.count ?? 0,
+        newPostsThisWeek: newPostsResult.count ?? 0,
+      });
+
+      setUsers((usersResult.data as AdminUser[] | null) ?? []);
+      setPosts(
+        ((postsResult.data as any[] | null) ?? []).map(post => ({
+          id: post.id,
+          title: post.title,
+          content: post.content,
+          created_at: post.created_at,
+          likes_count: post.likes_count,
+          comments_count: post.comments_count,
+          user_id: post.user_id,
+          profile: post.profiles ?? null,
+        })),
+      );
+    } catch (error) {
+      console.warn('Admin dashboard load failed:', error);
+      Alert.alert(
+        'Dashboard unavailable',
+        'The admin panel could not load fresh data. Check your Supabase policies if this keeps happening.',
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!authorized) return;
+    loadDashboard();
+  };
+
+  const handleToggleMentor = (user: AdminUser) => {
+    if (isAdminEmail(user.email) || (user.role_level ?? 0) >= 2) {
+      return;
+    }
+
+    const nextRoleLevel = (user.role_level ?? 0) >= 1 ? 0 : 1;
+    const actionLabel = nextRoleLevel >= 1 ? 'promote this student to mentor' : 'remove mentor access';
+
+    Alert.alert('Update role', `Do you want to ${actionLabel}?`, [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: "Confirm",
-        style: user.is_banned ? "default" : "destructive",
+        text: 'Confirm',
         onPress: async () => {
           const { error } = await supabase
-            .from("profiles")
-            .update({ is_banned: !user.is_banned })
-            .eq("id", user.id);
+            .from('profiles')
+            .update({ role_level: nextRoleLevel })
+            .eq('id', user.id);
 
           if (error) {
-            Alert.alert("Failed", error.message);
-          } else {
-            loadUsers();
+            Alert.alert(
+              'Action blocked',
+              'Supabase rejected the role update. Add an admin-only update policy on profiles to allow this.',
+            );
+            return;
           }
+
+          setUsers(current =>
+            current.map(item =>
+              item.id === user.id ? { ...item, role_level: nextRoleLevel } : item,
+            ),
+          );
+          setStats(current => ({
+            ...current,
+            mentorsAndAdmins: nextRoleLevel >= 1
+              ? current.mentorsAndAdmins + 1
+              : Math.max(current.mentorsAndAdmins - 1, 0),
+          }));
         },
       },
     ]);
   };
 
-  const changeRole = async (userId: string, newLevel: number) => {
-    const roleMap: { [key: number]: string } = {
-      0: "user",
-      5: "moderator",
-      8: "admin",
-      10: "super_admin",
-    };
+  const handleDeletePost = (post: AdminPost) => {
+    Alert.alert(
+      'Remove post',
+      'This removes the post from the feed immediately. Continue only if you want it gone for everyone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.from('posts').delete().eq('id', post.id);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: roleMap[newLevel], role_level: newLevel })
-      .eq("id", userId);
+            if (error) {
+              Alert.alert(
+                'Action blocked',
+                'Supabase rejected the delete request. Add an admin-only delete policy on posts to allow this.',
+              );
+              return;
+            }
 
-    if (error) {
-      Alert.alert("Failed", error.message);
-    } else {
-      setModalVisible(false);
-      loadUsers();
-    }
-  };
-
-  const stats = {
-    total: users.length,
-    banned: users.filter((u) => u.is_banned).length,
-    admins: users.filter((u) => u.role_level >= 8).length,
-    active: users.filter((u) => !u.is_banned).length,
-  };
-
-  const shimmerTranslate = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-200, SCREEN_WIDTH + 200],
-  });
-
-  const renderUser = ({ item }: { item: Profile }) => {
-    const cardAnim = useRef(new Animated.Value(0)).current;
-
-    const handlePressIn = () => {
-      Animated.spring(cardAnim, {
-        toValue: 1,
-        friction: 5,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const handlePressOut = () => {
-      Animated.spring(cardAnim, {
-        toValue: 0,
-        friction: 5,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const cardScale = cardAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0.98],
-    });
-
-    const getRoleBadgeColor = (level: number) => {
-      if (level >= 10) return "#EF4444";
-      if (level >= 8) return "#8B5CF6";
-      if (level >= 5) return "#3B82F6";
-      return "#64748B";
-    };
-
-    return (
-      <TouchableOpacity
-        onPress={() => {
-          setSelectedUser(item);
-          setModalVisible(true);
-        }}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={1}
-      >
-        <Animated.View
-          style={[
-            styles.card,
-            {
-              borderColor: getRoleBadgeColor(item.role_level),
-              transform: [{ scale: cardScale }],
-            },
-          ]}
-        >
-          <Animated.View
-            style={[
-              styles.cardShimmer,
-              { transform: [{ translateX: shimmerTranslate }] },
-            ]}
-          />
-
-          <View style={{ flex: 1 }}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.email}>{item.email}</Text>
-              <View
-                style={[
-                  styles.roleBadge,
-                  { backgroundColor: getRoleBadgeColor(item.role_level) },
-                ]}
-              >
-                <Text style={styles.roleBadgeText}>
-                  {item.role.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.meta}>Level {item.role_level}</Text>
-
-            {item.is_banned && (
-              <View style={styles.bannedBadge}>
-                <Ban size={12} color="#FF5252" />
-                <Text style={styles.banned}>BANNED</Text>
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              {
-                backgroundColor: item.is_banned ? "#2E7D32" : "#C62828",
-                borderColor: item.is_banned ? "#4CAF50" : "#FF5252",
-              },
-            ]}
-            onPress={() => toggleBan(item)}
-          >
-            {item.is_banned ? (
-              <CheckCircle size={16} color="#FFF" />
-            ) : (
-              <Ban size={16} color="#FFF" />
-            )}
-            <Text style={styles.buttonText}>
-              {item.is_banned ? "Unban" : "Ban"}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </TouchableOpacity>
+            setPosts(current => current.filter(item => item.id !== post.id));
+            setStats(current => ({
+              ...current,
+              totalPosts: Math.max(current.totalPosts - 1, 0),
+            }));
+          },
+        },
+      ],
     );
   };
 
-  if (loading) {
+  if (checkingAccess || loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#00FF41" />
-        <Text style={styles.loadingText}>ACCESSING MAINFRAME...</Text>
-      </View>
+      <SafeAreaView style={styles.loadingScreen}>
+        <View style={styles.loadingCard}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+          <Text style={styles.loadingTitle}>Opening control room</Text>
+          <Text style={styles.loadingBody}>We are checking your admin access and syncing the latest activity.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
+  if (!authorized) {
+    return null;
+  }
+
   return (
-    <View style={styles.container}>
-      {/* Matrix rain background */}
-      <View style={styles.matrixContainer} pointerEvents="none">
-        {Array.from({ length: Math.floor(SCREEN_WIDTH / 20) }).map((_, i) => (
-          <MatrixParticle key={i} delay={i * 200} column={i} />
-        ))}
-      </View>
-
-      {/* Scan line overlay */}
-      <ScanLine />
-
-      {/* Header with glitch effect */}
-      <View style={styles.header}>
-        <GlitchText text="SUPER ADMIN TERMINAL" />
-        <Shield size={20} color="#00FF41" style={{ marginLeft: 8 }} />
-      </View>
-
-      {/* Stats cards */}
-      <View style={styles.statsRow}>
-        <StatsCard icon={User} label="Total" value={stats.total} color="#00FF41" />
-        <StatsCard icon={CheckCircle} label="Active" value={stats.active} color="#3B82F6" />
-        <StatsCard icon={Ban} label="Banned" value={stats.banned} color="#EF4444" />
-        <StatsCard icon={Shield} label="Admins" value={stats.admins} color="#8B5CF6" />
-      </View>
-
-      {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#00FF41" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="SEARCH USERS..."
-          placeholderTextColor="#555"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Refresh button */}
-      <TouchableOpacity style={styles.refresh} onPress={loadUsers}>
-        <Activity size={16} color="#00FF41" />
-        <Text style={styles.refreshText}>REFRESH</Text>
-      </TouchableOpacity>
-
-      {/* User list */}
-      <FlatList
-        data={filteredUsers}
-        keyExtractor={(item) => item.id}
-        renderItem={renderUser}
-        contentContainerStyle={{ paddingBottom: 40 }}
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#38BDF8" />}
         showsVerticalScrollIndicator={false}
-      />
+      >
+        <View style={styles.hero}>
+          <View style={styles.heroBadge}>
+            <Icon name="shield-crown-outline" size={16} color="#93C5FD" />
+            <Text style={styles.heroBadgeText}>Private admin entry</Text>
+          </View>
+          <Text style={styles.heroTitle}>Vconnect Control Room</Text>
+          <Text style={styles.heroSubtitle}>
+            Hidden access is tied to {ADMIN_EMAIL}. Swipe down on your profile avatar to get here.
+          </Text>
 
-      {/* User detail modal */}
-      <UserDetailModal
-        visible={modalVisible}
-        user={selectedUser}
-        onClose={() => setModalVisible(false)}
-        onRoleChange={changeRole}
-      />
-    </View>
+          <View style={styles.heroStatsRow}>
+            {headerStats.map(item => (
+              <View key={item.label} style={styles.heroStatCard}>
+                <View style={[styles.heroStatIcon, { backgroundColor: `${item.accent}22` }]}>
+                  <Icon name={item.icon} size={20} color={item.accent} />
+                </View>
+                <Text style={styles.heroStatValue}>{item.value}</Text>
+                <Text style={styles.heroStatLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.tabRow}>
+          {TABS.map(tab => {
+            const active = tab.key === activeTab;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                activeOpacity={0.9}
+                style={[styles.tabChip, active && styles.tabChipActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Icon name={tab.icon} size={18} color={active ? '#071A2F' : '#94A3B8'} />
+                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {activeTab === 'overview' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Live overview</Text>
+            <View style={styles.metricGrid}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{stats.newUsersThisWeek}</Text>
+                <Text style={styles.metricLabel}>New students this week</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{stats.newPostsThisWeek}</Text>
+                <Text style={styles.metricLabel}>Fresh posts this week</Text>
+              </View>
+            </View>
+
+            <View style={styles.insightCard}>
+              <Text style={styles.insightTitle}>What you can control from here</Text>
+              <Text style={styles.insightBody}>
+                Review live student accounts, promote strong contributors to mentor, and remove posts directly from the feed.
+              </Text>
+              <View style={styles.insightPills}>
+                <View style={styles.insightPill}>
+                  <Icon name="account-arrow-up-outline" size={14} color="#38BDF8" />
+                  <Text style={styles.insightPillText}>Mentor access</Text>
+                </View>
+                <View style={styles.insightPill}>
+                  <Icon name="trash-can-outline" size={14} color="#38BDF8" />
+                  <Text style={styles.insightPillText}>Post removal</Text>
+                </View>
+                <View style={styles.insightPill}>
+                  <Icon name="database-refresh-outline" size={14} color="#38BDF8" />
+                  <Text style={styles.insightPillText}>Pull-to-refresh</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'users' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Student directory</Text>
+            {users.map(user => {
+              const roleMeta = getRoleMeta(user.role_level);
+              const canToggleMentor = !isAdminEmail(user.email) && (user.role_level ?? 0) < 2;
+
+              return (
+                <View key={user.id} style={styles.listCard}>
+                  <View style={styles.listCardHeader}>
+                    <View style={styles.listCardIdentity}>
+                      <View style={styles.userGlyph}>
+                        <Text style={styles.userGlyphText}>
+                          {(user.full_name ?? user.username ?? 'S').trim().charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.listCardCopy}>
+                        <Text style={styles.listCardTitle}>{user.full_name ?? user.username ?? 'Unnamed Student'}</Text>
+                        <Text style={styles.listCardSubtitle}>{user.email ?? 'Email unavailable'}</Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.roleBadge,
+                        { backgroundColor: roleMeta.backgroundColor, borderColor: roleMeta.borderColor },
+                      ]}
+                    >
+                      <Text style={[styles.roleBadgeText, { color: roleMeta.color }]}>{roleMeta.label}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText}>{user.branch ?? 'Branch hidden'}</Text>
+                    <Text style={styles.metaDivider}>•</Text>
+                    <Text style={styles.metaText}>{formatYear(user.year_of_study)}</Text>
+                    <Text style={styles.metaDivider}>•</Text>
+                    <Text style={styles.metaText}>Joined {formatDate(user.created_at)}</Text>
+                  </View>
+
+                  {canToggleMentor && (
+                    <TouchableOpacity
+                      activeOpacity={0.88}
+                      style={styles.inlineAction}
+                      onPress={() => handleToggleMentor(user)}
+                    >
+                      <Icon
+                        name={(user.role_level ?? 0) >= 1 ? 'account-remove-outline' : 'account-plus-outline'}
+                        size={18}
+                        color="#071A2F"
+                      />
+                      <Text style={styles.inlineActionText}>
+                        {(user.role_level ?? 0) >= 1 ? 'Remove mentor access' : 'Promote to mentor'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {activeTab === 'posts' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Latest posts</Text>
+            {posts.map(post => (
+              <View key={post.id} style={styles.listCard}>
+                <View style={styles.listCardHeader}>
+                  <View style={styles.listCardCopy}>
+                    <Text style={styles.listCardTitle}>
+                      {post.title?.trim() || post.content?.trim() || 'Untitled post'}
+                    </Text>
+                    <Text style={styles.listCardSubtitle}>
+                      {(post.profile?.full_name ?? post.profile?.username ?? 'Unknown author')} • {formatDate(post.created_at)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    style={styles.destructiveAction}
+                    onPress={() => handleDeletePost(post)}
+                  >
+                    <Icon name="trash-can-outline" size={18} color="#FEE2E2" />
+                    <Text style={styles.destructiveActionText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.postPreview} numberOfLines={3}>
+                  {post.content?.trim() || 'No body content stored for this post.'}
+                </Text>
+
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaText}>{post.likes_count ?? 0} likes</Text>
+                  <Text style={styles.metaDivider}>•</Text>
+                  <Text style={styles.metaText}>{post.comments_count ?? 0} comments</Text>
+                  <Text style={styles.metaDivider}>•</Text>
+                  <Text style={styles.metaText}>ID {post.id.slice(0, 8)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 16,
-    backgroundColor: "#000",
+    backgroundColor: '#071A2F',
   },
-
-  matrixContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  screen: {
+    flex: 1,
+    backgroundColor: '#071A2F',
   },
-
-  matrixChar: {
-    position: "absolute",
-    fontSize: 14,
-    fontFamily: "monospace",
-    color: "#00FF41",
-    fontWeight: "700",
+  contentContainer: {
+    paddingBottom: 36,
   },
-
-  scanLine: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: "#00FF41",
-    opacity: 0.3,
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: '#071A2F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    paddingTop: 10,
+  loadingCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#0F2742',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.18)',
+    alignItems: 'center',
   },
-
-  glitchContainer: {
-    position: "relative",
-  },
-
-  glitchTitle: {
+  loadingTitle: {
+    marginTop: 18,
     fontSize: 20,
-    fontWeight: "700",
-    color: "#00FF41",
-    fontFamily: "monospace",
-    letterSpacing: 2,
+    fontWeight: '700',
+    color: '#F8FAFC',
   },
-
-  glitchLayer1: {
-    position: "absolute",
-    color: "#FF00FF",
-    opacity: 0.8,
-    left: 0,
-  },
-
-  glitchLayer2: {
-    position: "absolute",
-    color: "#00FFFF",
-    opacity: 0.8,
-    left: 0,
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-
-  statsCard: {
-    flex: 1,
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginHorizontal: 4,
-    backgroundColor: "#111",
-  },
-
-  statsValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#FFF",
-    marginTop: 4,
-  },
-
-  statsLabel: {
-    fontSize: 10,
-    color: "#AAA",
-    marginTop: 2,
-    textTransform: "uppercase",
-  },
-
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1A1A",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#00FF41",
-  },
-
-  searchIcon: {
-    marginRight: 8,
-  },
-
-  searchInput: {
-    flex: 1,
-    height: 44,
-    color: "#FFF",
+  loadingBody: {
+    marginTop: 8,
     fontSize: 14,
-    fontFamily: "monospace",
+    lineHeight: 21,
+    textAlign: 'center',
+    color: '#94A3B8',
   },
-
-  refresh: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 8,
+  hero: {
+    marginHorizontal: 18,
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    borderRadius: 28,
+    backgroundColor: '#0F2742',
     borderWidth: 1,
-    borderColor: "#00FF41",
+    borderColor: 'rgba(125, 211, 252, 0.16)',
   },
-
-  refreshText: {
-    color: "#00FF41",
-    fontWeight: "600",
-    marginLeft: 6,
-    fontFamily: "monospace",
-  },
-
-  card: {
-    flexDirection: "row",
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: "#1A1A1A",
-    marginBottom: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    overflow: "hidden",
-    position: "relative",
-  },
-
-  cardShimmer: {
-    position: "absolute",
-    top: 0,
-    left: -200,
-    width: 200,
-    height: "100%",
-    backgroundColor: "rgba(0, 255, 65, 0.1)",
-  },
-
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-
-  email: {
-    color: "#FFF",
-    fontWeight: "600",
-    flex: 1,
-    fontFamily: "monospace",
-  },
-
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-
-  roleBadgeText: {
-    color: "#FFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  meta: {
-    color: "#AAA",
-    fontSize: 12,
-    marginTop: 2,
-    fontFamily: "monospace",
-  },
-
-  bannedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-  },
-
-  banned: {
-    color: "#FF5252",
-    fontSize: 12,
-    marginLeft: 4,
-    fontWeight: "700",
-  },
-
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(56, 189, 248, 0.10)',
     gap: 6,
   },
-
-  buttonText: {
-    color: "#FFF",
-    fontWeight: "600",
+  heroBadgeText: {
     fontSize: 12,
+    fontWeight: '700',
+    color: '#93C5FD',
+    letterSpacing: 0.3,
   },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#000",
-  },
-
-  loadingText: {
-    color: "#00FF41",
-    marginTop: 12,
-    fontFamily: "monospace",
-    fontSize: 12,
-  },
-
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
-    justifyContent: "flex-end",
-  },
-
-  modalContent: {
-    backgroundColor: "#1A1A1A",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 2,
-    borderLeftWidth: 2,
-    borderRightWidth: 2,
-    borderColor: "#00FF41",
-    paddingBottom: 40,
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-  },
-
-  modalTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#00FF41",
-    marginLeft: 12,
-    fontFamily: "monospace",
-  },
-
-  modalClose: {
-    padding: 4,
-  },
-
-  modalBody: {
-    padding: 20,
-  },
-
-  modalLabel: {
-    fontSize: 12,
-    color: "#AAA",
+  heroTitle: {
     marginTop: 16,
-    marginBottom: 4,
-    textTransform: "uppercase",
-    fontFamily: "monospace",
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#F8FAFC',
   },
-
-  modalValue: {
-    fontSize: 16,
-    color: "#FFF",
-    fontFamily: "monospace",
-  },
-
-  roleOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
-  },
-
-  roleOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 2,
-  },
-
-  roleOptionText: {
+  heroSubtitle: {
+    marginTop: 10,
     fontSize: 14,
-    fontWeight: "600",
+    lineHeight: 21,
+    color: '#CBD5E1',
+  },
+  heroStatsRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  heroStatCard: {
+    flexGrow: 1,
+    minWidth: '46%',
+    backgroundColor: '#102E4E',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  heroStatIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroStatValue: {
+    marginTop: 14,
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#F8FAFC',
+  },
+  heroStatLabel: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 18,
+    marginTop: 18,
+  },
+  tabChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: '#10263E',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.14)',
+  },
+  tabChipActive: {
+    backgroundColor: '#E2F3FF',
+    borderColor: '#BAE6FD',
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  tabLabelActive: {
+    color: '#071A2F',
+  },
+  section: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    gap: 14,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#F8FAFC',
+  },
+  metricGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: '#0F2742',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  metricValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#F8FAFC',
+  },
+  metricLabel: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#94A3B8',
+  },
+  insightCard: {
+    backgroundColor: '#F8FBFF',
+    borderRadius: 26,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  insightTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#071A2F',
+  },
+  insightBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#475569',
+  },
+  insightPills: {
+    marginTop: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  insightPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#E0F2FE',
+  },
+  insightPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0369A1',
+  },
+  listCard: {
+    backgroundColor: '#F8FBFF',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  listCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  listCardIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userGlyph: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#102E4E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userGlyphText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#E2F3FF',
+  },
+  listCardCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  listCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  listCardSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748B',
+  },
+  roleBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  metaDivider: {
+    marginHorizontal: 6,
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  inlineAction: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#E2F3FF',
+  },
+  inlineActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#071A2F',
+  },
+  destructiveAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#991B1B',
+  },
+  destructiveActionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FEE2E2',
+  },
+  postPreview: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#334155',
   },
 });

@@ -9,11 +9,27 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch existing session on mount
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let isMounted = true;
+
+    const loadSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn("Failed to restore session:", error.message);
+        }
+        if (isMounted) {
+          setSession(data.session);
+        }
+      } catch (error) {
+        console.warn("Failed to restore session:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadSession();
 
     // Listen to auth state changes (Google OAuth or email login)
     const {
@@ -22,7 +38,10 @@ export default function App() {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {

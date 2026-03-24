@@ -1,37 +1,68 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Svg, { Path } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 
-const ProfileHeader = () => {
+interface ProfileHeaderProps {
+    name?: string;
+    subtitle?: string;
+    bio?: string;
+    avatarUrl?: string;
+    onEdit?: () => void;
+    onSecretSwipeDown?: () => void;
+}
+
+const ProfileHeader: React.FC<ProfileHeaderProps> = ({
+    name = 'Alex Rivera',
+    subtitle = 'Computer Science • 3rd Year',
+    bio = '"Passionate developer focused on building scalable web solutions and fostering community growth through tech mentorship."',
+    avatarUrl = 'https://i.pravatar.cc/300?img=12',
+    onEdit,
+    onSecretSwipeDown,
+}) => {
+    const secretSwipeResponder = React.useMemo(
+        () =>
+            PanResponder.create({
+                onMoveShouldSetPanResponder: (_, gestureState) =>
+                    Math.abs(gestureState.dy) > 12 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+                onPanResponderRelease: (_, gestureState) => {
+                    if (gestureState.dy > 72 && gestureState.vy > 0.12) {
+                        onSecretSwipeDown?.();
+                    }
+                },
+            }),
+        [onSecretSwipeDown],
+    );
+
     return (
         <View style={styles.headerContainer}>
             <View style={styles.headerContent}>
                 <SafeAreaView edges={['top']}>
                     <View style={styles.topBar}>
                         <Text style={styles.screenTitle}>Profile</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={onEdit}>
                             <Icon name="square-edit-outline" size={24} color="#fff" />
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.profileHeader}>
-                        <Image
-                            source={{ uri: 'https://i.pravatar.cc/300?img=12' }}
-                            style={styles.avatar}
-                        />
+                        <View style={styles.avatarWrap} {...secretSwipeResponder.panHandlers}>
+                            <View style={styles.avatarAura} />
+                            <Image
+                                source={{ uri: avatarUrl }}
+                                style={styles.avatar}
+                            />
+                        </View>
                         <View style={styles.profileTextContainer}>
-                            <Text style={styles.userName}>Alex Rivera</Text>
-                            <Text style={styles.userSubtitle}>Computer Science • 3rd Year</Text>
+                            <Text style={styles.userName}>{name}</Text>
+                            <Text style={styles.userSubtitle}>{subtitle}</Text>
                         </View>
                     </View>
 
-                    <Text style={styles.bioText}>
-                        "Passionate developer focused on building scalable web solutions and fostering community growth through tech mentorship."
-                    </Text>
+                    <Text style={styles.bioText}>{bio}</Text>
                 </SafeAreaView>
             </View>
 
@@ -80,6 +111,22 @@ const styles = StyleSheet.create({
         borderRadius: 40,
         borderWidth: 3,
         borderColor: 'rgba(255,255,255,0.2)',
+        zIndex: 2,
+    },
+    avatarWrap: {
+        width: 92,
+        height: 92,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarAura: {
+        position: 'absolute',
+        width: 92,
+        height: 92,
+        borderRadius: 46,
+        backgroundColor: 'rgba(56, 189, 248, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(125, 211, 252, 0.18)',
     },
     profileTextContainer: {
         marginLeft: 16,

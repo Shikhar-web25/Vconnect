@@ -34,12 +34,15 @@ interface QuestionModalProps {
         fullAnswer: string;
         comments?: Comment[];
     } | null;
+    postId?: string;
+    onAddComment?: (postId: string, text: string) => Promise<Comment | null>;
     onClose: () => void;
 }
 
-const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, onClose }) => {
+const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, onAddComment, onClose }) => {
     const [newComment, setNewComment] = useState('');
     const [localComments, setLocalComments] = useState<Comment[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (data?.comments) {
@@ -58,14 +61,27 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, onClose })
 
     if (!data) return null;
 
-    const handleAddComment = () => {
-        if (!newComment.trim()) return;
+    const handleAddComment = async () => {
+        const content = newComment.trim();
+        if (!content || isSubmitting) return;
+
+        if (onAddComment && postId) {
+            setIsSubmitting(true);
+            const inserted = await onAddComment(postId, content);
+            if (inserted) {
+                setLocalComments([...localComments, inserted]);
+                setNewComment('');
+                Keyboard.dismiss();
+            }
+            setIsSubmitting(false);
+            return;
+        }
 
         const comment: Comment = {
             id: Date.now().toString(),
             userName: 'You',
             avatar: 'https://i.pravatar.cc/150?img=12',
-            text: newComment,
+            text: content,
             time: 'Just now',
         };
 
@@ -149,11 +165,18 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, onClose })
                                     onChangeText={setNewComment}
                                 />
                                 <TouchableOpacity
-                                    style={[styles.sendButton, !newComment.trim() && styles.sendButtonDisabled]}
+                                    style={[
+                                        styles.sendButton,
+                                        (!newComment.trim() || isSubmitting) && styles.sendButtonDisabled
+                                    ]}
                                     onPress={handleAddComment}
-                                    disabled={!newComment.trim()}
+                                    disabled={!newComment.trim() || isSubmitting}
                                 >
-                                    <Icon name="send" size={20} color={newComment.trim() ? "#fff" : "#CBD5E1"} />
+                                    <Icon
+                                        name="send"
+                                        size={20}
+                                        color={newComment.trim() && !isSubmitting ? "#fff" : "#CBD5E1"}
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>

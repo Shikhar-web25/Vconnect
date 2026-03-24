@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -16,6 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import ChatDetailHeader from '../components/dm/ChatDetailHeader';
 import ChatBubble from '../components/dm/ChatBubble';
 import { RootStackParamList } from '../navigation/AuthNavigator';
+import { supabase } from '../../supabaseClient';
 
 type ChatDetailScreenRouteProp = RouteProp<RootStackParamList, 'ChatDetail'>;
 
@@ -30,45 +31,89 @@ const ChatDetailScreen = () => {
     const route = useRoute<ChatDetailScreenRouteProp>();
     const { chatId, name, avatar } = route.params;
     const [inputText, setInputText] = useState('');
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            text: "I've reviewed your graph theory logic. The implementation of Dijkstra's looks solid, but check the edge cases for negative weights.",
-            time: '19:45',
-            isMe: false,
-        },
-        {
-            id: '2',
-            text: "Thanks! I'll re-check the Bellman-Ford approach for the negative cycles then. Did you see the update on the research notes?",
-            time: '19:48',
-            isMe: true,
-        },
-        {
-            id: '3',
-            text: "Yes, much better clarity now. Let's discuss it in the lab tomorrow.",
-            time: '19:50',
-            isMe: false
-        },
-        {
-            id: '4',
-            text: "Perfect. See you at 10 AM! 🚀",
-            time: '19:51',
-            isMe: true
+    const [messages, setMessages] = useState<Message[]>([]);
+
+    useEffect(() => {
+        loadConversation();
+    }, [chatId]);
+
+    const formatTime = (isoDate?: string | null) => {
+        if (!isoDate) return '';
+        const date = new Date(isoDate);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const loadConversation = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setCurrentUserId(user.id);
+
+        const { data, error } = await supabase
+            .from('messages')
+            .select('id, sender_id, receiver_id, message_text, created_at')
+            .or(`and(sender_id.eq.${user.id},receiver_id.eq.${chatId}),and(sender_id.eq.${chatId},receiver_id.eq.${user.id})`)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            return;
         }
-    ]);
+
+        const mapped = (data ?? []).map((row: any) => ({
+            id: row.id,
+            text: row.message_text ?? '',
+            time: formatTime(row.created_at),
+            isMe: row.sender_id === user.id,
+        }));
+
+        setMessages(mapped);
+    };
 
     const handleSend = () => {
-        if (!inputText.trim()) return;
+        sendMessage();
+    };
 
-        const newMessage: Message = {
-            id: Date.now().toString(),
-            text: inputText,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isMe: true
-        };
+    const sendMessage = async () => {
+        const content = inputText.trim();
+        if (!content || !currentUserId) return;
 
-        setMessages([...messages, newMessage]);
+        const { data, error } = await supabase
+            .from('messages')
+            .insert({
+                sender_id: currentUserId,
+                receiver_id: chatId,
+                message_text: content,
+            })
+            .select('id, sender_id, receiver_id, message_text, created_at')
+            .single();
+
+        if (error || !data) return;
+
+        const [user1, user2] =
+            currentUserId < chatId ? [currentUserId, chatId] : [chatId, currentUserId];
+
+        await supabase
+            .from('conversations')
+            .upsert(
+                {
+                    user1,
+                    user2,
+                    last_message: content,
+                    last_message_at: new Date().toISOString(),
+                },
+                { onConflict: 'user1,user2' }
+            );
+
+        setMessages((prev) => [
+            ...prev,
+            {
+                id: data.id,
+                text: data.message_text ?? content,
+                time: formatTime(data.created_at),
+                isMe: true,
+            },
+        ]);
         setInputText('');
     };
 

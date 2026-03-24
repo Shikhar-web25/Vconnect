@@ -2,7 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ProfileMenuItem } from './ProfileMenuItem';
 
-const ProfileContentActivity = () => {
+const ProfileContentActivity = ({
+    postsCount = 0,
+    savedCount = 0,
+}: {
+    postsCount?: number;
+    savedCount?: number;
+}) => {
     return (
         <View style={styles.container}>
             <Text style={styles.sectionHeader}>CONTENT & ACTIVITY</Text>
@@ -16,7 +22,7 @@ const ProfileContentActivity = () => {
                     rightElement={
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={styles.countBadge}>
-                                <Text style={styles.countBadgeText}>24</Text>
+                                <Text style={styles.countBadgeText}>{postsCount}</Text>
                             </View>
                         </View>
                     }
@@ -29,6 +35,13 @@ const ProfileContentActivity = () => {
                     iconColor="#4F46E5"
                     iconBg="#E0E7FF"
                     label="Saved Knowledge"
+                    rightElement={
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={styles.countBadge}>
+                                <Text style={styles.countBadgeText}>{savedCount}</Text>
+                            </View>
+                        </View>
+                    }
                 />
             </View>
 

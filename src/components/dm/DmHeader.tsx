@@ -3,14 +3,16 @@ import { View, Text, StyleSheet, StatusBar } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const DmHeader = () => {
+const DmHeader = ({ name, unreadCount = 0 }: { name: string; unreadCount?: number }) => {
     return (
         <LinearGradient colors={['#4A6D8C', '#6B8CAE']} style={styles.gradientHeader}>
             <SafeAreaView edges={['top']} style={styles.safeArea}>
                 <View style={styles.headerContent}>
                     <StatusBar barStyle="light-content" />
-                    <Text style={styles.greetingText}>Hi Alex Johnson</Text>
-                    <Text style={styles.unreadText}>06 UNREAD MESSAGES</Text>
+                    <Text style={styles.greetingText}>Hi {name}</Text>
+                    <Text style={styles.unreadText}>
+                        {String(unreadCount).padStart(2, '0')} UNREAD MESSAGES
+                    </Text>
                 </View>
             </SafeAreaView>
         </LinearGradient>

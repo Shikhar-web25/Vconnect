@@ -1,100 +1,244 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    View,
+    StyleSheet,
+    ScrollView,
+    Modal,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    KeyboardAvoidingView,
+    Platform,
+    ActivityIndicator,
+} from 'react-native';
 import HomeHeader from '../components/home/HomeHeader';
 import QuestionCard from '../components/feed/QuestionCard';
 import FloatingFAB from '../components/home/FloatingFAB';
 import QuestionModal from '../components/feed/QuestionModal';
+import { supabase } from '../../supabaseClient';
+
+type FeedComment = {
+    id: string;
+    userName: string;
+    avatar: string;
+    text: string;
+    time: string;
+};
+
+type FeedPost = {
+    id: string;
+    userId?: string;
+    userName: string;
+    userAvatar: string;
+    timePosted: string;
+    category: string;
+    questionTitle: string;
+    questionPreview: string;
+    fullAnswer: string;
+    likeCount: number;
+    commentCount: number;
+};
 
 const HomeScreen = () => {
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+    const [posts, setPosts] = useState<FeedPost[]>([]);
+    const [commentsByPostId, setCommentsByPostId] = useState<Record<string, FeedComment[]>>({});
+    const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [createVisible, setCreateVisible] = useState(false);
+    const [newPostText, setNewPostText] = useState('');
+    const [posting, setPosting] = useState(false);
+    const [currentUser, setCurrentUser] = useState<{ id: string; full_name?: string; username?: string; avatar_url?: string } | null>(null);
 
-    const questions = [
-        {
-            id: '1',
-            userName: 'Alex Johnson',
-            userAvatar: 'https://i.pravatar.cc/150?img=33',
-            timePosted: '2h ago',
-            category: 'Computer Science',
-            questionTitle: "How do I efficiently implement Dijkstra's algorithm for my graph theory assignment?",
-            questionPreview:
-                "The best approach is to use a priority queue (Min-Heap). You'll need to maintain a set of unvisited nodes and continuously update their distances...",
-            fullAnswer:
-                "The best approach is to use a priority queue (Min-Heap). You'll need to maintain a set of distances initialized to infinity, except for the start node which is 0. \n\n1. Initialize distances to all nodes as infinite, start node to 0.\n2. Add start node to priority queue.\n3. While queue is not empty, extract min distance node.\n4. Update neighbors if a shorter path is found.\n5. Repeat until destination reached or queue empty.\n\nMake sure to handle the case where the graph has negative weights (use Bellman-Ford instead if so).",
-            likeCount: 124,
-            commentCount: 42,
-            comments: [
-                {
-                    id: 'c1',
-                    userName: 'David Kim',
-                    avatar: 'https://i.pravatar.cc/150?img=11',
-                    text: 'Make sure to handle the edge case where the graph is disconnected!',
-                    time: '1h ago'
-                },
-                {
-                    id: 'c2',
-                    userName: 'Emily Chen',
-                    avatar: 'https://i.pravatar.cc/150?img=5',
-                    text: 'This helped me so much with my assignment, thanks!',
-                    time: '30m ago'
-                }
-            ]
-        },
-        {
-            id: '2',
-            userName: 'Sarah Williams',
-            userAvatar: 'https://i.pravatar.cc/150?img=45',
-            timePosted: '5h ago',
-            category: 'Organic Chemistry',
-            questionTitle: 'Tips for memorizing functional groups for the upcoming midterm?',
-            questionPreview:
-                'I found that drawing them out repeatedly and using mnemonic devices really helps. Try focusing on the carbon-oxygen bonds first...',
-            fullAnswer:
-                "I found that drawing them out repeatedly and using mnemonic devices really helps. Try grouping them by structure (e.g., carbonyls: aldehydes, ketones, carboxylic acids).\n\nFlashcards are your best friend here. Also, try to understand the properties that define each group rather than just rote memorization. For example, knowing that alcohols can hydrogen bond explains their higher boiling points.",
-            likeCount: 89,
-            commentCount: 15,
-            comments: [
-                {
-                    id: 'c1',
-                    userName: 'John Doe',
-                    avatar: 'https://i.pravatar.cc/150?img=3',
-                    text: 'I recommend using Anki for flashcards. It uses spaced repetition which is great for memorization.',
-                    time: '2h ago'
-                }
-            ]
-        },
-        {
-            id: '3',
-            userName: 'Michael Chen',
-            userAvatar: 'https://i.pravatar.cc/150?img=12',
-            timePosted: '8h ago',
-            category: 'Physics',
-            questionTitle: 'Can someone explain quantum entanglement in simple terms?',
-            questionPreview:
-                'Think of it as two particles being connected in such a way that measuring one instantly determines the state of the other...',
-            fullAnswer:
-                "Think of it as two particles being connected in such a way that measuring one instantly determines the state of the other, no matter how far apart they are. \n\nImagine you have a pair of gloves, one left and one right, in two separate boxes. You send one to Mars and keep one on Earth. The moment you open your box and see a left glove, you instantly know the one on Mars is a right glove. Quantum entanglement is like that, but with particle spins instead of gloves, and the correlation exists even before measurement.",
-            likeCount: 256,
-            commentCount: 67,
-            comments: [
-                {
-                    id: 'c1',
-                    userName: 'Astrophysics Fan',
-                    avatar: 'https://i.pravatar.cc/150?img=8',
-                    text: 'Spooky action at a distance!',
-                    time: '4h ago'
-                },
-                {
-                    id: 'c2',
-                    userName: 'Quantum Newbie',
-                    avatar: 'https://i.pravatar.cc/150?img=9',
-                    text: 'This glove analogy is perfect. Finally makes sense.',
-                    time: '1h ago'
-                }
-            ]
-        },
-    ];
+    useEffect(() => {
+        loadCurrentUser();
+        loadPosts();
+    }, []);
 
-    const selectedQuestion = questions.find((q) => q.id === selectedQuestionId) || null;
+    useEffect(() => {
+        if (selectedQuestionId) {
+            loadComments(selectedQuestionId);
+        }
+    }, [selectedQuestionId]);
+
+    const formatTimeAgo = (isoDate?: string | null) => {
+        if (!isoDate) return '';
+        const date = new Date(isoDate);
+        const diffMs = Date.now() - date.getTime();
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        if (diffMinutes < 1) return 'Just now';
+        if (diffMinutes < 60) return `${diffMinutes}m ago`;
+        const diffHours = Math.floor(diffMinutes / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d ago`;
+    };
+
+    const mapPost = (row: any): FeedPost => {
+        const profile = row?.profiles ?? row?.user ?? null;
+        const authorName = profile?.full_name ?? profile?.username ?? 'Unknown';
+        const authorAvatar = profile?.avatar_url ?? 'https://i.pravatar.cc/150?img=12';
+        const branch = profile?.branch ?? 'General';
+        const content = row?.content ?? '';
+
+        return {
+            id: row.id,
+            userId: row.user_id,
+            userName: authorName,
+            userAvatar: authorAvatar,
+            timePosted: formatTimeAgo(row.created_at),
+            category: branch,
+            questionTitle: content,
+            questionPreview: content,
+            fullAnswer: content,
+            likeCount: row.likes_count ?? 0,
+            commentCount: row.comments_count ?? 0,
+        };
+    };
+
+    const loadCurrentUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, username, avatar_url')
+            .eq('id', user.id)
+            .single();
+        if (data) {
+            setCurrentUser(data);
+        }
+    };
+
+    const loadPosts = async () => {
+        setLoading(true);
+        setErrorMessage(null);
+
+        const { data, error } = await supabase
+            .from('posts')
+            .select('id, user_id, content, image_url, created_at, likes_count, comments_count, profiles (id, full_name, username, avatar_url, branch)')
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+        if (error) {
+            setErrorMessage(error.message);
+            setLoading(false);
+            return;
+        }
+
+        const mapped = (data ?? []).map(mapPost);
+        setPosts(mapped);
+        setLoading(false);
+    };
+
+    const loadComments = async (postId: string) => {
+        const { data, error } = await supabase
+            .from('comments')
+            .select('id, content, created_at, user_id, profiles (id, full_name, username, avatar_url)')
+            .eq('post_id', postId)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            return;
+        }
+
+        const mapped: FeedComment[] = (data ?? []).map((row: any) => {
+            const profile = row?.profiles ?? row?.user ?? null;
+            return {
+                id: row.id,
+                userName: profile?.full_name ?? profile?.username ?? 'Unknown',
+                avatar: profile?.avatar_url ?? 'https://i.pravatar.cc/150?img=12',
+                text: row.content ?? '',
+                time: formatTimeAgo(row.created_at),
+            };
+        });
+
+        setCommentsByPostId((prev) => ({
+            ...prev,
+            [postId]: mapped,
+        }));
+    };
+
+    const handleAddComment = async (postId: string, text: string) => {
+        if (!currentUser) return null;
+        const { data, error } = await supabase
+            .from('comments')
+            .insert({
+                post_id: postId,
+                user_id: currentUser.id,
+                content: text,
+            })
+            .select('id, content, created_at, user_id, profiles (id, full_name, username, avatar_url)')
+            .single();
+
+        if (error || !data) return null;
+
+        const profile = data?.profiles ?? null;
+        const comment: FeedComment = {
+            id: data.id,
+            userName: profile?.full_name ?? profile?.username ?? currentUser.full_name ?? currentUser.username ?? 'You',
+            avatar: profile?.avatar_url ?? currentUser.avatar_url ?? 'https://i.pravatar.cc/150?img=12',
+            text: data.content ?? text,
+            time: formatTimeAgo(data.created_at),
+        };
+
+        setCommentsByPostId((prev) => ({
+            ...prev,
+            [postId]: [...(prev[postId] ?? []), comment],
+        }));
+
+        setPosts((prev) =>
+            prev.map((post) =>
+                post.id === postId
+                    ? { ...post, commentCount: (post.commentCount ?? 0) + 1 }
+                    : post
+            )
+        );
+
+        return comment;
+    };
+
+    const handleCreatePost = async () => {
+        if (!newPostText.trim() || posting) return;
+        setPosting(true);
+        setErrorMessage(null);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            setPosting(false);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('posts')
+            .insert({
+                user_id: user.id,
+                content: newPostText.trim(),
+                title: newPostText.trim(),
+            })
+            .select('id, user_id, content, image_url, created_at, likes_count, comments_count, profiles (id, full_name, username, avatar_url, branch)')
+            .single();
+
+        if (error || !data) {
+            setErrorMessage(error?.message ?? 'Failed to post.');
+            setPosting(false);
+            return;
+        }
+
+        setPosts((prev) => [mapPost(data), ...prev]);
+        setNewPostText('');
+        setCreateVisible(false);
+        setPosting(false);
+    };
+
+    const selectedQuestion = useMemo(() => {
+        if (!selectedQuestionId) return null;
+        const post = posts.find((q) => q.id === selectedQuestionId);
+        if (!post) return null;
+        return {
+            ...post,
+            comments: commentsByPostId[selectedQuestionId] ?? [],
+        };
+    }, [selectedQuestionId, posts, commentsByPostId]);
 
     return (
         <View style={styles.container}>
@@ -112,7 +256,18 @@ const HomeScreen = () => {
 
                 <View style={styles.feedWrapper}>
                     <View style={styles.feedContainer}>
-                        {questions.map((question) => (
+                        {loading && (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color="#4A6D8C" />
+                                <Text style={styles.loadingText}>Loading posts...</Text>
+                            </View>
+                        )}
+
+                        {!loading && errorMessage && (
+                            <Text style={styles.errorText}>{errorMessage}</Text>
+                        )}
+
+                        {!loading && !errorMessage && posts.map((question) => (
                             <QuestionCard
                                 key={question.id}
                                 {...question}
@@ -123,13 +278,58 @@ const HomeScreen = () => {
                 </View>
             </ScrollView>
 
-            <FloatingFAB onPress={() => console.log('Create Post')} />
+            <FloatingFAB onPress={() => setCreateVisible(true)} />
 
             <QuestionModal
                 visible={!!selectedQuestion}
                 data={selectedQuestion}
+                postId={selectedQuestionId ?? undefined}
+                onAddComment={handleAddComment}
                 onClose={() => setSelectedQuestionId(null)}
             />
+
+            <Modal
+                visible={createVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setCreateVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
+                    <View style={styles.createCard}>
+                        <Text style={styles.createTitle}>Create Post</Text>
+                        <TextInput
+                            style={styles.createInput}
+                            placeholder="Share something with VIT Bhopal..."
+                            placeholderTextColor="#94A3B8"
+                            value={newPostText}
+                            onChangeText={setNewPostText}
+                            multiline
+                        />
+                        <View style={styles.createActions}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => setCreateVisible(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.postButton, !newPostText.trim() && styles.postButtonDisabled]}
+                                onPress={handleCreatePost}
+                                disabled={!newPostText.trim() || posting}
+                            >
+                                {posting ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.postButtonText}>Post</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
     );
 };
@@ -154,6 +354,87 @@ const styles = StyleSheet.create({
     feedContainer: {
         paddingHorizontal: 20,
         marginTop: -10, // Slight overlap closer to header
+    },
+    loadingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+    },
+    loadingText: {
+        marginLeft: 10,
+        color: '#64748B',
+        fontSize: 14,
+    },
+    errorText: {
+        color: '#DC2626',
+        paddingVertical: 16,
+        fontSize: 14,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    createCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    createTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#0F172A',
+        marginBottom: 12,
+    },
+    createInput: {
+        minHeight: 120,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        padding: 14,
+        fontSize: 15,
+        color: '#0F172A',
+        textAlignVertical: 'top',
+        backgroundColor: '#F8FAFC',
+    },
+    createActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 16,
+        gap: 12,
+    },
+    cancelButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    cancelButtonText: {
+        color: '#475569',
+        fontWeight: '600',
+    },
+    postButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        backgroundColor: '#4A6D8C',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 90,
+    },
+    postButtonDisabled: {
+        backgroundColor: '#94A3B8',
+    },
+    postButtonText: {
+        color: '#FFFFFF',
+        fontWeight: '700',
     },
 });
 

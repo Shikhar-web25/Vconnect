@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Modal,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -26,6 +27,19 @@ import { supabase } from "../../../../supabaseClient";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const VIT_DOMAIN = "@vitbhopal.ac.in";
+const TERMS_OF_USE_TEXT = `Replace this placeholder with your full Terms and Conditions text.
+
+You can paste the entire content here as one long string.
+
+Suggested sections:
+1. Eligibility and institutional email use
+2. Acceptable conduct
+3. Content ownership and moderation
+4. Reporting and enforcement
+5. Privacy and data usage
+6. Limitation of liability
+7. Contact details
+`;
 
 // ---------------------------------------------------------------------------
 // Floating Background Particle
@@ -626,6 +640,8 @@ const SignUpScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
 
   const [nameError, setNameError] = useState("");
   const [regNoError, setRegNoError] = useState("");
@@ -701,15 +717,7 @@ const SignUpScreen: React.FC = () => {
       ]),
     ]).start();
 
-    // Rotating gradient on logo
-    Animated.loop(
-      Animated.timing(logoRotateAnim, {
-        toValue: 1,
-        duration: 10000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // Rotating gradient on logo (disabled)
 
     const showListener = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
@@ -806,6 +814,11 @@ const SignUpScreen: React.FC = () => {
       hasError = true;
     } else if (password !== confirmPassword) {
       setConfirmError("Passwords do not match");
+      hasError = true;
+    }
+
+    if (!hasAcceptedTerms) {
+      Alert.alert("Terms Required", "Please read and accept the Terms & Conditions to continue.");
       hasError = true;
     }
 
@@ -1010,9 +1023,26 @@ const SignUpScreen: React.FC = () => {
                 title="Sign Up"
                 onPress={handleSignUp}
                 loading={loading}
-                disabled={completedFields < 4}
+                disabled={completedFields < 4 || !hasAcceptedTerms}
               />
             </Animated.View>
+
+            <View style={styles.termsContainer}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.termsCheckbox, hasAcceptedTerms && styles.termsCheckboxActive]}
+                onPress={() => setHasAcceptedTerms((prev) => !prev)}
+              >
+                {hasAcceptedTerms ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+              </TouchableOpacity>
+              <View style={styles.termsCopyWrap}>
+                <Text style={styles.termsText}>I agree to the </Text>
+                <TouchableOpacity activeOpacity={0.8} onPress={() => setTermsVisible(true)}>
+                  <Text style={styles.termsLink}>Terms & Conditions</Text>
+                </TouchableOpacity>
+                <Text style={styles.termsText}> of Vconnect.</Text>
+              </View>
+            </View>
 
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>Already have an account? </Text>
@@ -1023,6 +1053,59 @@ const SignUpScreen: React.FC = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      <Modal visible={termsVisible} animationType="slide" transparent onRequestClose={() => setTermsVisible(false)}>
+        <View style={styles.termsModalBackdrop}>
+          <View style={styles.termsModalSheet}>
+            <View style={styles.termsModalHandle} />
+            <LinearGradient colors={["#4A6D8C", "#6B8CAE"]} style={styles.termsModalHeader}>
+              <View style={styles.termsHeaderCopy}>
+                <View style={styles.termsHeroIcon}>
+                  <MaterialCommunityIcons name="shield-check-outline" size={22} color="#FFFFFF" />
+                </View>
+                <View style={styles.termsHeaderTextWrap}>
+                  <Text style={styles.termsModalEyebrow}>Vconnect Legal</Text>
+                  <Text style={styles.termsModalTitle}>Terms & Conditions</Text>
+                  <Text style={styles.termsModalSubtitle}>
+                    Please review and accept these terms before creating your account.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.termsCloseButton} onPress={() => setTermsVisible(false)}>
+                <X size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </LinearGradient>
+
+            <ScrollView
+              style={styles.termsScroll}
+              contentContainerStyle={styles.termsScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.termsPaper}>
+                <View style={styles.termsPaperAccent} />
+                <Text style={styles.termsBodyText}>{TERMS_OF_USE_TEXT}</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.termsActions}>
+              <Text style={styles.termsFooterNote}>You can reopen this agreement any time before signing up.</Text>
+              <TouchableOpacity
+                style={[styles.termsAcceptButton, hasAcceptedTerms && styles.termsAcceptedButton]}
+                activeOpacity={0.9}
+                onPress={() => {
+                  setHasAcceptedTerms(true);
+                  setTermsVisible(false);
+                }}
+              >
+                <Check size={16} color="#FFFFFF" strokeWidth={3} />
+                <Text style={styles.termsAcceptButtonText}>
+                  {hasAcceptedTerms ? "Accepted" : "Accept & Continue"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 };
@@ -1171,4 +1254,182 @@ const styles = StyleSheet.create({
   loginContainer: { flexDirection: "row", justifyContent: "center", marginTop: 18 },
   loginText: { fontSize: 14, color: "#64748B" },
   loginLink: { fontSize: 14, color: "#4A6D8C", fontWeight: "700" },
+  termsContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 16,
+    paddingHorizontal: 4,
+  },
+  termsCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    marginTop: 1,
+  },
+  termsCheckboxActive: {
+    backgroundColor: "#4A6D8C",
+    borderColor: "#4A6D8C",
+  },
+  termsCopyWrap: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  termsText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    lineHeight: 18,
+  },
+  termsLink: {
+    fontSize: 12,
+    color: "#4A6D8C",
+    fontWeight: "700",
+    lineHeight: 18,
+    textDecorationLine: "underline",
+  },
+  termsModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    justifyContent: "flex-end",
+  },
+  termsModalSheet: {
+    height: SCREEN_HEIGHT * 0.76,
+    backgroundColor: "#F8FAFC",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    overflow: "hidden",
+  },
+  termsModalHandle: {
+    alignSelf: "center",
+    width: 56,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "rgba(148,163,184,0.45)",
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  termsModalHeader: {
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 20,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+  termsHeaderCopy: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flex: 1,
+    paddingRight: 16,
+  },
+  termsHeroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+    marginTop: 2,
+  },
+  termsHeaderTextWrap: {
+    flex: 1,
+  },
+  termsModalEyebrow: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.8)",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  termsModalTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  termsModalSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "rgba(255,255,255,0.86)",
+  },
+  termsCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  termsScroll: {
+    flex: 1,
+  },
+  termsScrollContent: {
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 24,
+  },
+  termsPaper: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  termsPaperAccent: {
+    width: 56,
+    height: 4,
+    borderRadius: 3,
+    backgroundColor: "#4A6D8C",
+    marginBottom: 14,
+  },
+  termsBodyText: {
+    fontSize: 14,
+    lineHeight: 24,
+    color: "#334155",
+  },
+  termsActions: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 26,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+  },
+  termsFooterNote: {
+    fontSize: 12,
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  termsAcceptButton: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#4A6D8C",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  termsAcceptedButton: {
+    backgroundColor: "#10B981",
+  },
+  termsAcceptButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });

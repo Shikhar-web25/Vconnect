@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Mail, Lock, Check, Sparkles } from "lucide-react-native";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
+import InAppBrowser from "react-native-inappbrowser-reborn";
 
 import PasswordInput from "../components/auth/PasswordInput";
 import AuthButton from "../components/auth/AuthButton";
@@ -300,7 +301,7 @@ const AnimatedGoogleButton = ({
         Animated.timing(textOpacity, {
           toValue: 1,
           duration: 220,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     }, animDelay);
@@ -325,12 +326,12 @@ const AnimatedGoogleButton = ({
           Animated.timing(pulseAnim, {
             toValue: 1.02,
             duration: 800,
-            useNativeDriver: true,
+            useNativeDriver: false,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 800,
-            useNativeDriver: true,
+            useNativeDriver: false,
           }),
         ])
       ).start();
@@ -413,17 +414,7 @@ const LoginScreen = () => {
 
   const canSignIn = username.trim().length > 0 && password.length > 0;
 
-  // ── Logo rotation ────────────────────────────────────────────────────
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(logoRotateAnim, {
-        toValue: 1,
-        duration: 12000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
+  // ── Logo rotation (disabled) ─────────────────────────────────────────
 
   // ── Email glow on focus ──────────────────────────────────────────────
   useEffect(() => {
@@ -526,6 +517,46 @@ const LoginScreen = () => {
     }
   }, [successMsg]);
 
+  const getTokensFromUrl = (url: string) => {
+    const hash = url.split("#")[1];
+    if (!hash) return null;
+    const params = new URLSearchParams(hash);
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token || !refresh_token) return null;
+    return { access_token, refresh_token };
+  };
+
+  const handleAuthCallback = async (url: string) => {
+    if (!url.includes("auth-callback")) return;
+
+    const tokens = getTokensFromUrl(url);
+    if (tokens) {
+      const { error: setSessionError } = await supabase.auth.setSession(tokens);
+      if (setSessionError) {
+        setError("Login failed. Please try again.");
+        shake();
+        return;
+      }
+    }
+
+    const { data } = await supabase.auth.getUser();
+    const email = (data.user?.email || "").toLowerCase();
+
+    if (!email.endsWith(VIT_DOMAIN)) {
+      await supabase.auth.signOut();
+      setError("Only VIT Bhopal emails allowed");
+      shake();
+      return;
+    }
+
+    setSuccessMsg("Login successful");
+
+    setTimeout(() => {
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+    }, 600);
+  };
+
   // ── Google Login ─────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
@@ -553,7 +584,21 @@ const LoginScreen = () => {
     }
 
     if (data?.url) {
-      await Linking.openURL(data.url);
+      const inApp = await InAppBrowser.isAvailable();
+      if (inApp) {
+        const result = await InAppBrowser.openAuth(data.url, "vconnect://auth-callback", {
+          showTitle: false,
+          enableUrlBarHiding: true,
+          enableDefaultShare: false,
+          ephemeralWebSession: false,
+          forceCloseOnRedirection: true,
+        });
+        if (result.type === "success" && result.url) {
+          await handleAuthCallback(result.url);
+        }
+      } else {
+        await Linking.openURL(data.url);
+      }
     }
 
     setGoogleLoading(false);
@@ -562,23 +607,7 @@ const LoginScreen = () => {
   // ── OAuth Return Handler ─────────────────────────────────────────────
   useEffect(() => {
     const sub = Linking.addEventListener("url", async ({ url }) => {
-      if (!url.includes("auth-callback")) return;
-
-      const { data } = await supabase.auth.getUser();
-      const email = data.user?.email || "";
-
-      if (!email.endsWith(VIT_DOMAIN)) {
-        await supabase.auth.signOut();
-        setError("Only VIT Bhopal emails allowed");
-        shake();
-        return;
-      }
-
-      setSuccessMsg("Login successful");
-
-      setTimeout(() => {
-        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-      }, 600);
+      await handleAuthCallback(url);
     });
 
     return () => sub.remove();
