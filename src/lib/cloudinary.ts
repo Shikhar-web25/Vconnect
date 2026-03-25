@@ -2,6 +2,7 @@ import { supabase } from "../../supabaseClient";
 
 export type CloudinaryPreset = "vconnect_posts" | "vconnect_docs" | "vconnect_avatars";
 export type CloudinaryResourceType = "image" | "video" | "raw";
+export type CloudinaryDeliveryType = "upload" | "private" | "authenticated";
 
 export type CloudinaryFile = {
   uri: string;
@@ -17,19 +18,27 @@ type SignatureResponse = {
   timestamp: string;
   signature: string;
   resourceType: CloudinaryResourceType;
+  deliveryType: CloudinaryDeliveryType;
+};
+
+type DownloadUrlResponse = {
+  downloadUrl: string;
+  expiresAt: number;
 };
 
 export const uploadToCloudinary = async ({
   file,
   preset,
   resourceType,
+  deliveryType,
 }: {
   file: CloudinaryFile;
   preset: CloudinaryPreset;
   resourceType?: CloudinaryResourceType;
+  deliveryType?: CloudinaryDeliveryType;
 }) => {
   const { data, error } = await supabase.functions.invoke<SignatureResponse>("cloudinary-sign", {
-    body: { preset, resourceType },
+    body: { action: "upload", preset, resourceType, deliveryType },
   });
 
   if (error || !data) {
@@ -49,6 +58,9 @@ export const uploadToCloudinary = async ({
   form.append("signature", data.signature);
   form.append("upload_preset", data.uploadPreset);
   form.append("folder", data.folder);
+  if (data.deliveryType && data.deliveryType !== "upload") {
+    form.append("type", data.deliveryType);
+  }
 
   const response = await fetch(uploadUrl, {
     method: "POST",
@@ -61,4 +73,35 @@ export const uploadToCloudinary = async ({
   }
 
   return json;
+};
+
+export const getCloudinaryDownloadUrl = async ({
+  publicId,
+  resourceType = "raw",
+  deliveryType = "private",
+  format = "pdf",
+  expiresInSeconds = 300,
+}: {
+  publicId: string;
+  resourceType?: CloudinaryResourceType;
+  deliveryType?: CloudinaryDeliveryType;
+  format?: string;
+  expiresInSeconds?: number;
+}) => {
+  const { data, error } = await supabase.functions.invoke<DownloadUrlResponse>("cloudinary-sign", {
+    body: {
+      action: "download",
+      publicId,
+      resourceType,
+      deliveryType,
+      format,
+      expiresInSeconds,
+    },
+  });
+
+  if (error || !data?.downloadUrl) {
+    throw new Error(error?.message || "Failed to get signed resume URL.");
+  }
+
+  return data.downloadUrl;
 };

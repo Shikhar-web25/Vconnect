@@ -75,7 +75,8 @@ const HomeScreen = () => {
     };
 
     const mapPost = (row: any): FeedPost => {
-        const profile = row?.profiles ?? row?.user ?? null;
+        const relatedProfile = row?.profiles ?? row?.user ?? null;
+        const profile = Array.isArray(relatedProfile) ? relatedProfile[0] : relatedProfile;
         const authorName = profile?.full_name ?? profile?.username ?? 'Unknown';
         const authorAvatar = profile?.avatar_url ?? 'https://i.pravatar.cc/150?img=12';
         const branch = profile?.branch ?? 'General';
@@ -142,7 +143,8 @@ const HomeScreen = () => {
         }
 
         const mapped: FeedComment[] = (data ?? []).map((row: any) => {
-            const profile = row?.profiles ?? row?.user ?? null;
+            const relatedProfile = row?.profiles ?? row?.user ?? null;
+            const profile = Array.isArray(relatedProfile) ? relatedProfile[0] : relatedProfile;
             return {
                 id: row.id,
                 userName: profile?.full_name ?? profile?.username ?? 'Unknown',
@@ -172,7 +174,8 @@ const HomeScreen = () => {
 
         if (error || !data) return null;
 
-        const profile = data?.profiles ?? null;
+        const relatedProfile = data?.profiles ?? null;
+        const profile = Array.isArray(relatedProfile) ? relatedProfile[0] : relatedProfile;
         const comment: FeedComment = {
             id: data.id,
             userName: profile?.full_name ?? profile?.username ?? currentUser.full_name ?? currentUser.username ?? 'You',

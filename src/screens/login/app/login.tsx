@@ -606,8 +606,19 @@ const LoginScreen = () => {
 
   // ── OAuth Return Handler ─────────────────────────────────────────────
   useEffect(() => {
-    const sub = Linking.addEventListener("url", async ({ url }) => {
+    const handleIncomingUrl = async (url?: string | null) => {
+      if (!url) return;
       await handleAuthCallback(url);
+    };
+
+    Linking.getInitialURL()
+      .then(handleIncomingUrl)
+      .catch((err) => {
+        console.warn("Initial OAuth URL read failed:", err);
+      });
+
+    const sub = Linking.addEventListener("url", async ({ url }) => {
+      await handleIncomingUrl(url);
     });
 
     return () => sub.remove();

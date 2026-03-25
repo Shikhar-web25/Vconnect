@@ -27,11 +27,13 @@
         </intent-filter>
 
         <!--  Supabase OAuth Deep Link -->
-        <intent-filter android:autoVerify="true">
+        <intent-filter>
             <action android:name="android.intent.action.VIEW"/>
             <category android:name="android.intent.category.DEFAULT"/>
             <category android:name="android.intent.category.BROWSABLE"/>
 
+            <data
+                android:scheme="vconnect" />
             <data
                 android:scheme="vconnect"
                 android:host="auth-callback"/>

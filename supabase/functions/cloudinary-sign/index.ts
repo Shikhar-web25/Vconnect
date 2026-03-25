@@ -10,12 +10,20 @@ const corsHeaders = {
 };
 
 type PresetName = "vconnect_posts" | "vconnect_docs" | "vconnect_avatars";
+type ResourceType = "image" | "video" | "raw";
+type DeliveryType = "upload" | "private" | "authenticated";
 
-const presetConfig: Record<PresetName, { folder: string; defaultResourceType: "image" | "video" | "raw" }> = {
+const presetConfig: Record<PresetName, { folder: string; defaultResourceType: ResourceType }> = {
   vconnect_posts: { folder: "vconnect/posts", defaultResourceType: "image" },
   vconnect_docs: { folder: "vconnect/docs", defaultResourceType: "raw" },
   vconnect_avatars: { folder: "vconnect/avatars", defaultResourceType: "image" },
 };
+
+const isResourceType = (value: unknown): value is ResourceType =>
+  value === "image" || value === "video" || value === "raw";
+
+const isDeliveryType = (value: unknown): value is DeliveryType =>
+  value === "upload" || value === "private" || value === "authenticated";
 
 const sha1 = async (message: string) => {
   const data = new TextEncoder().encode(message);
@@ -57,8 +65,63 @@ serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({}));
+  const action = body?.action === "download" ? "download" : "upload";
+
+  if (action === "download") {
+    const publicId = typeof body?.publicId === "string" ? body.publicId.trim() : "";
+    const resourceType = isResourceType(body?.resourceType) ? body.resourceType : "raw";
+    const deliveryType = isDeliveryType(body?.deliveryType) ? body.deliveryType : "private";
+    const formatCandidate = typeof body?.format === "string" ? body.format.trim().toLowerCase() : "";
+    const format = formatCandidate ? formatCandidate.replace(/^\./, "") : "pdf";
+    const expiresInSecondsCandidate = Number(body?.expiresInSeconds);
+    const expiresInSeconds =
+      Number.isFinite(expiresInSecondsCandidate) && expiresInSecondsCandidate >= 60
+        ? Math.min(expiresInSecondsCandidate, 3600)
+        : 300;
+
+    if (!publicId) {
+      return new Response(JSON.stringify({ error: "Invalid publicId" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const expiresAt = timestamp + expiresInSeconds;
+    const timestampStr = timestamp.toString();
+    const expiresAtStr = expiresAt.toString();
+
+    const paramsToSign: Record<string, string> = {
+      expires_at: expiresAtStr,
+      format,
+      public_id: publicId,
+      timestamp: timestampStr,
+      type: deliveryType,
+    };
+
+    const signature = await buildSignature(paramsToSign, apiSecret);
+
+    const query = new URLSearchParams({
+      api_key: apiKey,
+      expires_at: expiresAtStr,
+      format,
+      public_id: publicId,
+      signature,
+      timestamp: timestampStr,
+      type: deliveryType,
+    });
+
+    const downloadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/download?${query.toString()}`;
+
+    return new Response(JSON.stringify({ downloadUrl, expiresAt }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const preset = body?.preset as PresetName | undefined;
-  const resourceType = body?.resourceType as "image" | "video" | "raw" | undefined;
+  const resourceType = body?.resourceType as ResourceType | undefined;
+  const deliveryType = body?.deliveryType as DeliveryType | undefined;
 
   if (!preset || !presetConfig[preset]) {
     return new Response(JSON.stringify({ error: "Invalid preset" }), {
@@ -68,7 +131,8 @@ serve(async (req) => {
   }
 
   const folder = presetConfig[preset].folder;
-  const finalResourceType = resourceType ?? presetConfig[preset].defaultResourceType;
+  const finalResourceType = isResourceType(resourceType) ? resourceType : presetConfig[preset].defaultResourceType;
+  const finalDeliveryType = isDeliveryType(deliveryType) ? deliveryType : "upload";
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
   const paramsToSign: Record<string, string> = {
@@ -76,6 +140,9 @@ serve(async (req) => {
     timestamp,
     upload_preset: preset,
   };
+  if (finalDeliveryType !== "upload") {
+    paramsToSign.type = finalDeliveryType;
+  }
 
   const signature = await buildSignature(paramsToSign, apiSecret);
 
@@ -88,6 +155,7 @@ serve(async (req) => {
       timestamp,
       signature,
       resourceType: finalResourceType,
+      deliveryType: finalDeliveryType,
     }),
     {
       status: 200,

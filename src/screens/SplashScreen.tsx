@@ -129,12 +129,18 @@ export default function SplashScreen({ navigation }: Props) {
   ).current;
 
   const ambientParticles = useRef(
-    Array.from({ length: 15 }, () => ({
-      x: new Animated.Value((Math.random() - 0.5) * width),
-      y: new Animated.Value((Math.random() - 0.5) * height),
-      opacity: new Animated.Value(0),
-      scale: new Animated.Value(0),
-    }))
+    Array.from({ length: 15 }, () => {
+      const startX = (Math.random() - 0.5) * width;
+      const startY = (Math.random() - 0.5) * height;
+      return {
+        startX,
+        startY,
+        x: new Animated.Value(startX),
+        y: new Animated.Value(startY),
+        opacity: new Animated.Value(0),
+        scale: new Animated.Value(0),
+      };
+    })
   ).current;
 
   // ─── PARTICLE BUILD SYSTEM (NEW - PHASE 0) ─────────────────────────────────
@@ -208,6 +214,11 @@ export default function SplashScreen({ navigation }: Props) {
     ambientParticles.forEach((particle, i) => {
       Animated.loop(
         Animated.sequence([
+          Animated.timing(particle.y, {
+            toValue: particle.startY,
+            duration: 0,
+            useNativeDriver: true,
+          }),
           Animated.timing(particle.opacity, {
             toValue: 0.3,
             duration: 2000,
@@ -216,7 +227,7 @@ export default function SplashScreen({ navigation }: Props) {
           }),
           Animated.parallel([
             Animated.timing(particle.y, {
-              toValue: particle.y._value - 150,
+              toValue: particle.startY - 150,
               duration: 4000,
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,

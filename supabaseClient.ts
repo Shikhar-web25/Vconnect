@@ -12,8 +12,4 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: false,
   },
-
-  realtime: {
-    enabled: false,
-  },
 })
