@@ -8,6 +8,7 @@ import SplashScreen from '../screens/SplashScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import AdminDashboard from '../screens/_admin/AdminDashboard';
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -15,8 +16,9 @@ export type RootStackParamList = {
   Signup: undefined;
   ForgotPassword: undefined;
   Main: undefined;
-  ChatDetail: { chatId: string; name: string; avatar: string };
+  ChatDetail: { chatId: string; name: string; avatar: any };
   AdminDashboard: undefined;
+  UserProfile: { name: string; avatar: any; batch?: string; about?: string; bio?: string; contributions?: number };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -34,6 +36,8 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
       {isAuthenticated ? (
         <>
           <Stack.Screen name="Main" component={BottomTabNavigator} />
+          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+          <Stack.Screen name="UserProfile" component={UserProfileScreen} />
           <Stack.Screen
             name="AdminDashboard"
             component={AdminDashboard}
@@ -45,46 +49,18 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
         </>
       ) : (
         <>
-          <Stack.Screen
-            name="Splash"
-            component={SplashScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Main"
-            component={BottomTabNavigator}
-          />
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Main" component={BottomTabNavigator} />
           <Stack.Screen
             name="Signup"
             component={SignupScreen}
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              title: '',
-              headerTintColor: '#FFFFFF',
-              gestureEnabled: true
-            }}
+            options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
           />
           <Stack.Screen
             name="ForgotPassword"
             component={ForgotPasswordScreen}
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              title: '',
-              headerTintColor: '#FFFFFF',
-              gestureEnabled: true
-            }}
-          />
-          <Stack.Screen
-            name="ChatDetail"
-            component={ChatDetailScreen}
-            options={{ headerShown: false }}
+            options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
           />
           <Stack.Screen
             name="AdminDashboard"
@@ -94,6 +70,8 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
               title: 'Admin Dashboard'
             }}
           />
+          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+          <Stack.Screen name="UserProfile" component={UserProfileScreen} />
         </>
       )}
     </Stack.Navigator>
