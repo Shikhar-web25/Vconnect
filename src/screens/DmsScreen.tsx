@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
+  ActivityIndicator,
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -16,6 +18,8 @@ import {
   TouchableWithoutFeedback,
   Dimensions,
   ImageSourcePropType,
+  Linking,
+  Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -37,6 +41,8 @@ const TEXT_DARK = '#1A1A2E';
 const TEXT_MUTED = '#8892A6';
 const { width: SW } = Dimensions.get('window');
 const FILTERS = ['All', 'Unread', 'Pinned'] as const;
+const VIT_EMAIL_SUFFIX = '@vitbhopal.ac.in';
+const APP_INVITE_URL = 'https://vconnect.app';
 
 type ChatItemData = {
   id: string;
@@ -126,6 +132,11 @@ const DmsScreen = () => {
   const [currentUserName, setCurrentUserName] = useState('Student');
   const [currentUserAvatar, setCurrentUserAvatar] = useState<ImageSourcePropType>(getMaleAvatar(0));
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [newDmVisible, setNewDmVisible] = useState(false);
+  const [newDmEmail, setNewDmEmail] = useState('');
+  const [newDmLoading, setNewDmLoading] = useState(false);
+  const [inviteVisible, setInviteVisible] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
   const skeletonPulse = useRef(new Animated.Value(0.42)).current;
 
   const formatTime = (isoDate?: string | null) => {
@@ -133,6 +144,9 @@ const DmsScreen = () => {
     const date = new Date(isoDate);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const isInstitutionalEmail = (value: string) => normalizeEmail(value).endsWith(VIT_EMAIL_SUFFIX);
 
   const loadChats = useCallback(
     async (showLoader = true, userIdOverride?: string) => {
@@ -357,6 +371,77 @@ const DmsScreen = () => {
     [navigation],
   );
 
+  const startDmByEmail = useCallback(async () => {
+    const email = normalizeEmail(newDmEmail);
+
+    if (!email) {
+      Alert.alert('Email required', 'Enter a VIT institutional email to start a DM.');
+      return;
+    }
+
+    if (!isInstitutionalEmail(email)) {
+      Alert.alert('Institutional email only', 'DM search supports only @vitbhopal.ac.in emails.');
+      return;
+    }
+
+    setNewDmLoading(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, avatar_url, bio, year_of_study, email')
+      .eq('email', email)
+      .limit(1)
+      .maybeSingle();
+    setNewDmLoading(false);
+
+    if (error) {
+      Alert.alert('Lookup failed', error.message);
+      return;
+    }
+
+    if (!data?.id) {
+      setNewDmVisible(false);
+      setInviteEmail(email);
+      setInviteVisible(true);
+      return;
+    }
+
+    if (data.id === currentUserId) {
+      Alert.alert('Invalid recipient', 'You cannot start a DM with your own account.');
+      return;
+    }
+
+    setNewDmVisible(false);
+    setNewDmEmail('');
+    navigation.navigate('ChatDetail', {
+      chatId: data.id,
+      userId: data.id,
+      name: data.full_name ?? data.username ?? email,
+      avatar: data.avatar_url ? { uri: data.avatar_url } : getMaleAvatar(0),
+    });
+  }, [currentUserId, navigation, newDmEmail]);
+
+  const inviteMessage = `${currentUserName} wants to chat with you on Vconnect.\nJoin here: ${APP_INVITE_URL}`;
+  const inviteSubject = 'You are invited to Vconnect';
+
+  const sendInviteEmail = useCallback(async () => {
+    const mailto = `mailto:${encodeURIComponent(inviteEmail)}?subject=${encodeURIComponent(inviteSubject)}&body=${encodeURIComponent(inviteMessage)}`;
+    const supported = await Linking.canOpenURL(mailto);
+    if (!supported) {
+      Alert.alert('Email app unavailable', 'Could not open the email app on this device.');
+      return;
+    }
+    await Linking.openURL(mailto);
+    setInviteVisible(false);
+  }, [inviteEmail, inviteMessage]);
+
+  const shareInvite = useCallback(async () => {
+    await Share.share({
+      message: inviteMessage,
+      title: inviteSubject,
+    });
+    setInviteVisible(false);
+  }, [inviteMessage]);
+
   const renderSkeletonRows = () =>
     Array.from({ length: 6 }, (_, index) => (
       <Animated.View
@@ -381,11 +466,20 @@ const DmsScreen = () => {
             <Text style={styles.headerTitle}>Messages</Text>
             <Text style={styles.headerSub}>{filteredChats.length} CONVERSATIONS</Text>
           </View>
-          <TouchableOpacity onPress={goToProfile} activeOpacity={0.8}>
-            <View style={styles.profileRing}>
-              <Image source={toImageSource(currentUserAvatar)} style={styles.profileAvatar} />
-            </View>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => setNewDmVisible(true)}
+              activeOpacity={0.8}
+              style={styles.newDmButton}
+            >
+              <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToProfile} activeOpacity={0.8}>
+              <View style={styles.profileRing}>
+                <Image source={toImageSource(currentUserAvatar)} style={styles.profileAvatar} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.glassSearch}>
@@ -460,6 +554,74 @@ const DmsScreen = () => {
           }
         />
       </View>
+
+      <Modal transparent visible={newDmVisible} animationType="fade" onRequestClose={() => setNewDmVisible(false)}>
+        <TouchableWithoutFeedback onPress={() => setNewDmVisible(false)}>
+          <View style={styles.modalOverlayCenter}>
+            <TouchableWithoutFeedback>
+              <View style={styles.newDmCard}>
+                <Text style={styles.newDmTitle}>Start DM by Email</Text>
+                <Text style={styles.newDmSubtitle}>Only {VIT_EMAIL_SUFFIX} users can be messaged directly.</Text>
+                <TextInput
+                  style={styles.newDmInput}
+                  value={newDmEmail}
+                  onChangeText={setNewDmEmail}
+                  placeholder={`student${VIT_EMAIL_SUFFIX}`}
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <View style={styles.newDmActions}>
+                  <TouchableOpacity
+                    style={[styles.newDmActionBtn, styles.newDmActionMuted]}
+                    onPress={() => setNewDmVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.newDmActionMutedText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.newDmActionBtn, styles.newDmActionPrimary]}
+                    onPress={startDmByEmail}
+                    activeOpacity={0.85}
+                    disabled={newDmLoading}
+                  >
+                    {newDmLoading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.newDmActionPrimaryText}>Find User</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <Modal transparent visible={inviteVisible} animationType="fade" onRequestClose={() => setInviteVisible(false)}>
+        <TouchableWithoutFeedback onPress={() => setInviteVisible(false)}>
+          <View style={styles.modalOverlayCenter}>
+            <TouchableWithoutFeedback>
+              <View style={styles.newDmCard}>
+                <Text style={styles.newDmTitle}>User Not Registered</Text>
+                <Text style={styles.newDmSubtitle}>
+                  {inviteEmail} is not on Vconnect yet. Send an invite?
+                </Text>
+                <View style={styles.inviteActions}>
+                  <TouchableOpacity style={styles.inviteBtn} onPress={sendInviteEmail} activeOpacity={0.85}>
+                    <Ionicons name="mail-outline" size={16} color={ACCENT} />
+                    <Text style={styles.inviteBtnText}>Email Invite</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.inviteBtn} onPress={shareInvite} activeOpacity={0.85}>
+                    <Ionicons name="share-social-outline" size={16} color={ACCENT} />
+                    <Text style={styles.inviteBtnText}>Share Invite</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       <Modal transparent visible={!!previewUser} animationType="fade" onRequestClose={() => setPreviewUser(null)}>
         <TouchableWithoutFeedback onPress={() => setPreviewUser(null)}>
@@ -557,6 +719,20 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: TEXT_DARK, letterSpacing: -0.5 },
   headerSub: { fontSize: 10, fontWeight: '700', color: TEXT_MUTED, marginTop: 3, letterSpacing: 1.2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  newDmButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   profileRing: {
     width: 48,
     height: 48,
@@ -755,6 +931,89 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   previewBtnSecondaryText: { color: DEEP, fontSize: 14, fontWeight: '700' },
+  modalOverlayCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(30,26,46,0.48)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+  },
+  newDmCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+  },
+  newDmTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: TEXT_DARK,
+  },
+  newDmSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 18,
+  },
+  newDmInput: {
+    marginTop: 14,
+    borderWidth: 1.2,
+    borderColor: '#D6DEED',
+    borderRadius: 12,
+    height: 46,
+    paddingHorizontal: 12,
+    color: TEXT_DARK,
+    backgroundColor: '#F8FAFF',
+  },
+  newDmActions: {
+    marginTop: 14,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  newDmActionBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newDmActionMuted: {
+    backgroundColor: '#EEF2F8',
+  },
+  newDmActionPrimary: {
+    backgroundColor: ACCENT,
+  },
+  newDmActionMutedText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  newDmActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  inviteActions: {
+    marginTop: 14,
+    gap: 10,
+  },
+  inviteBtn: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D6DEED',
+    backgroundColor: '#F8FAFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  inviteBtnText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(30,26,46,0.4)', justifyContent: 'flex-end' },
   optionSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
   optionHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
