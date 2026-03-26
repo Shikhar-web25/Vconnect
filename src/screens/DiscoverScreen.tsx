@@ -1,1185 +1,513 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
   FlatList,
-  ScrollView,
+  Image,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  StatusBar,
-  Image,
-  Modal,
-  Animated,
-  Dimensions,
-  PanResponder,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Linking,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import Icon from "react-native-vector-icons/MaterialIcons";
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { supabase } from '../../supabaseClient';
+import { getMaleAvatar } from '../utils/avatar';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const PRIMARY = "#4A6D8C";
-const CARD_BG = "#ffffff";
-const BG = "#f1f5f9";
-const TEXT_MAIN = "#0f172a";
-const TEXT_MUTED = "#64748b";
-const BORDER = "#e2e8f0";
-const SCREEN_HEIGHT = Dimensions.get("window").height;
+const PRIMARY = '#4A6D8C';
+const BG = '#F1F5F9';
+const CARD = '#FFFFFF';
+const TEXT_DARK = '#0F172A';
+const TEXT_MUTED = '#64748B';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Profile {
+type ProfileLite = {
+  id: string;
+  full_name?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+};
+
+type PostItem = {
+  id: string;
+  user_id: string;
+  title?: string | null;
+  content?: string | null;
+  created_at?: string | null;
+  likes_count?: number | null;
+  comments_count?: number | null;
+  tags?: string[] | null;
+  profile?: ProfileLite | null;
+};
+
+type TopProfile = {
+  id: string;
   name: string;
-  image: string;
-}
-
-interface Comment {
-  id: string;
-  author: string;
-  avatar: string;
-  text: string;
-  time: string;
-}
-
-interface Opportunity {
-  id: string;
-  title: string;
-  daysAgo: string;
-  description: string;
-  author?: string;
-  authorAvatar?: string;
-  likes?: number;
-  comments?: number;
-  tags?: string[];
-  bullets?: string[];
-}
-
-// ─── ProfileAvatar ─────────────────────────────────────────────────────────
-const ProfileAvatar = ({ name, image }: Profile) => (
-  <View style={styles.avatarWrapper}>
-    <View style={styles.avatarRing}>
-      <Image source={{ uri: image }} style={styles.avatarImage} />
-    </View>
-    <Text style={styles.avatarName} numberOfLines={1}>
-      {name.split(" ")[0]}
-    </Text>
-  </View>
-);
-
-// ─── CommentModal ─────────────────────────────────────────────────────────────
-interface CommentModalProps {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  comments: Comment[];
-  onAddComment: (text: string) => void;
-}
-
-const CommentModal = ({ visible, onClose, title, comments, onAddComment }: CommentModalProps) => {
-  const [text, setText] = useState("");
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 150,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const handleSend = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onAddComment(trimmed);
-    setText("");
-  };
-
-  return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={commentStyles.backdrop} activeOpacity={1} onPress={onClose} />
-      <Animated.View style={[commentStyles.sheet, { transform: [{ translateY: slideAnim }] }]}>
-        <View style={commentStyles.header}>
-          <TouchableOpacity onPress={onClose} style={commentStyles.backBtn}>
-            <Icon name="arrow-back" size={20} color="#fff" />
-          </TouchableOpacity>
-          <Text style={commentStyles.headerTitle} numberOfLines={1}>Comments</Text>
-          <View style={{ width: 32 }} />
-        </View>
-
-        <View style={commentStyles.postPreview}>
-          <Text style={commentStyles.postPreviewText} numberOfLines={1}>{title}</Text>
-        </View>
-
-        <ScrollView style={commentStyles.list} showsVerticalScrollIndicator={false}>
-          {comments.length === 0 ? (
-            <View style={commentStyles.emptyState}>
-              <Icon name="chat-bubble-outline" size={36} color="#cbd5e1" />
-              <Text style={commentStyles.emptyText}>No comments yet. Be the first!</Text>
-            </View>
-          ) : (
-            comments.map((c) => (
-              <View key={c.id} style={commentStyles.commentRow}>
-                <Image source={{ uri: c.avatar }} style={commentStyles.commentAvatar} />
-                <View style={commentStyles.commentBubble}>
-                  <View style={commentStyles.commentMeta}>
-                    <Text style={commentStyles.commentAuthor}>{c.author}</Text>
-                    <Text style={commentStyles.commentTime}>{c.time}</Text>
-                  </View>
-                  <Text style={commentStyles.commentText}>{c.text}</Text>
-                </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={10}
-        >
-          <View style={commentStyles.inputRow}>
-            <TextInput
-              style={commentStyles.input}
-              placeholder="Write a comment..."
-              placeholderTextColor="#94a3b8"
-              value={text}
-              onChangeText={setText}
-              multiline
-            />
-            <TouchableOpacity
-              style={[commentStyles.sendBtn, !text.trim() && commentStyles.sendBtnDisabled]}
-              onPress={handleSend}
-              disabled={!text.trim()}
-            >
-              <Icon name="send" size={18} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Animated.View>
-    </Modal>
-  );
+  avatar: any;
+  postsCount: number;
+  likesTotal: number;
+  score: number;
 };
 
-const commentStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.75,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#475569",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  backBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: {
-    color: "#fff", fontSize: 13, fontWeight: "800",
-    letterSpacing: 1.1, textTransform: "uppercase",
-    flex: 1, textAlign: "center",
-  },
-  postPreview: {
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
-    backgroundColor: "#f8fafc",
-  },
-  postPreviewText: { fontSize: 12, color: TEXT_MUTED, fontWeight: "500" },
-  list: { paddingHorizontal: 16, paddingTop: 10, minHeight: 120 },
-  emptyState: { alignItems: "center", paddingVertical: 36, gap: 10 },
-  emptyText: { color: "#94a3b8", fontSize: 14 },
-  commentRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
-  commentAvatar: { width: 34, height: 34, borderRadius: 17, marginTop: 2 },
-  commentBubble: {
-    flex: 1, backgroundColor: "#f1f5f9",
-    borderRadius: 12, padding: 10,
-  },
-  commentMeta: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  commentAuthor: { fontSize: 12, fontWeight: "700", color: TEXT_MAIN },
-  commentTime: { fontSize: 10, color: TEXT_MUTED },
-  commentText: { fontSize: 13, color: "#334155", lineHeight: 18 },
-  inputRow: {
-    flexDirection: "row", alignItems: "flex-end", gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: BORDER,
-    backgroundColor: "#fff", paddingBottom: 28,
-  },
-  input: {
-    flex: 1, backgroundColor: "#f1f5f9", borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 13, color: TEXT_MAIN, maxHeight: 80,
-  },
-  sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center",
-  },
-  sendBtnDisabled: { backgroundColor: "#94a3b8" },
-});
-
-// ─── ShareSheet ───────────────────────────────────────────────────────────────
-interface ShareSheetProps {
-  visible: boolean;
-  onClose: () => void;
-  post: Opportunity | null;
-}
-
-const ShareSheet = ({ visible, onClose, post }: ShareSheetProps) => {
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const dragY = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      dragY.setValue(0);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 22,
-        stiffness: 160,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) dragY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || gs.vy > 0.8) {
-          Animated.timing(slideAnim, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(onClose);
-        } else {
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, damping: 20 }).start();
-        }
-      },
-    })
-  ).current;
-
-  const translateY = Animated.add(slideAnim, dragY);
-
-  const shareOptions = [
-    { icon: "chat-bubble", label: "Message",    color: "#10b981", bg: "#d1fae5" },
-    { icon: "email",       label: "Email",       color: "#3b82f6", bg: "#dbeafe" },
-    { icon: "link",        label: "Copy Link",   color: "#8b5cf6", bg: "#ede9fe" },
-    { icon: "groups",      label: "Community",   color: PRIMARY,   bg: "#e0eaf3" },
-  ];
-
-  const handleOption = (label: string) => {
-    if (label === "Copy Link") {
-      Alert.alert("Link copied!", "The post link has been copied to your clipboard.");
-    } else {
-      Alert.alert("Shared!", `Post shared via ${label}.`);
-    }
-    onClose();
-  };
-
-  return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={shareStyles.backdrop} activeOpacity={1} onPress={onClose} />
-      <Animated.View style={[shareStyles.sheet, { transform: [{ translateY }] }]}>
-
-        {/* Drag handle area */}
-        <View {...panResponder.panHandlers}>
-          <View style={shareStyles.handleWrap}>
-            <View style={shareStyles.handle} />
-          </View>
-
-          {/* Header with back button */}
-          <View style={shareStyles.header}>
-            <TouchableOpacity style={shareStyles.backBtn} onPress={onClose}>
-              <Icon name="arrow-back" size={20} color="#fff" />
-            </TouchableOpacity>
-            <Text style={shareStyles.headerTitle}>Share Post</Text>
-            <View style={{ width: 32 }} />
-          </View>
-        </View>
-
-        {/* Post preview */}
-        {post && (
-          <View style={shareStyles.postPreview}>
-            <Icon name="article" size={15} color={TEXT_MUTED} />
-            <Text style={shareStyles.postPreviewText} numberOfLines={2}>{post.title}</Text>
-          </View>
-        )}
-
-        {/* Share options grid */}
-        <View style={shareStyles.optionsGrid}>
-          {shareOptions.map((opt) => (
-            <TouchableOpacity
-              key={opt.label}
-              style={shareStyles.optionItem}
-              onPress={() => handleOption(opt.label)}
-              activeOpacity={0.75}
-            >
-              <View style={[shareStyles.optionIcon, { backgroundColor: opt.bg }]}>
-                <Icon name={opt.icon} size={22} color={opt.color} />
-              </View>
-              <Text style={shareStyles.optionLabel}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Cancel */}
-        <TouchableOpacity style={shareStyles.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-          <Text style={shareStyles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </Modal>
-  );
+const formatRelativeTime = (createdAt?: string | null) => {
+  if (!createdAt) return 'Just now';
+  const diffMs = Date.now() - new Date(createdAt).getTime();
+  const mins = Math.floor(diffMs / (1000 * 60));
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 };
 
-const shareStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 34,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
-  },
-  handleWrap: {
-    backgroundColor: "#475569",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 0,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.4)" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#475569",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  backBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: {
-    color: "#fff", fontSize: 13, fontWeight: "800",
-    letterSpacing: 1.1, textTransform: "uppercase",
-    flex: 1, textAlign: "center",
-  },
-  postPreview: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#f8fafc",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  postPreviewText: { flex: 1, fontSize: 12, color: TEXT_MUTED, fontWeight: "500", lineHeight: 18 },
-  optionsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-  },
-  optionItem: { alignItems: "center", gap: 8 },
-  optionIcon: {
-    width: 56, height: 56, borderRadius: 28,
-    alignItems: "center", justifyContent: "center",
-  },
-  optionLabel: { fontSize: 12, fontWeight: "600", color: TEXT_MAIN },
-  cancelBtn: {
-    marginHorizontal: 20,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  cancelText: { fontSize: 15, fontWeight: "700", color: "#475569" },
-});
-
-// ─── PostMenuSheet ────────────────────────────────────────────────────────────
-interface PostMenuSheetProps {
-  visible: boolean;
-  onClose: () => void;
-  onHide: () => void;
-  onReport: () => void;
-  postTitle: string;
-}
-
-const PostMenuSheet = ({ visible, onClose, onHide, onReport, postTitle }: PostMenuSheetProps) => {
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const dragY = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      dragY.setValue(0);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 22,
-        stiffness: 160,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  // ── FIX: PanResponder added to PostMenuSheet ──
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) dragY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || gs.vy > 0.8) {
-          Animated.timing(slideAnim, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(onClose);
-        } else {
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, damping: 20 }).start();
-        }
-      },
-    })
-  ).current;
-
-  const translateY = Animated.add(slideAnim, dragY);
-
-  const menuItems = [
-    {
-      icon: "visibility-off",
-      label: "Hide post",
-      sublabel: "See fewer posts like this",
-      color: "#334155",
-      onPress: () => { onClose(); setTimeout(onHide, 250); },
-    },
-    {
-      icon: "flag",
-      label: "Report post",
-      sublabel: "We won't tell who reported it",
-      color: "#ef4444",
-      onPress: () => { onClose(); setTimeout(onReport, 250); },
-    },
-  ];
-
-  return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={menuStyles.backdrop} activeOpacity={1} onPress={onClose} />
-      <Animated.View style={[menuStyles.sheet, { transform: [{ translateY }] }]}>
-
-        {/* Drag handle — attached to panResponder */}
-        <View {...panResponder.panHandlers}>
-          <View style={menuStyles.handleWrap}>
-            <View style={menuStyles.handle} />
-          </View>
-        </View>
-
-        {/* Post preview */}
-        <View style={menuStyles.previewRow}>
-          <Icon name="article" size={16} color={TEXT_MUTED} />
-          <Text style={menuStyles.previewText} numberOfLines={1}>{postTitle}</Text>
-        </View>
-
-        {/* Menu items */}
-        {menuItems.map((item, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[menuStyles.menuRow, i < menuItems.length - 1 && menuStyles.menuRowBorder]}
-            onPress={item.onPress}
-            activeOpacity={0.7}
-          >
-            <View style={[menuStyles.menuIconWrap, { backgroundColor: item.color === "#ef4444" ? "#fef2f2" : "#f1f5f9" }]}>
-              <Icon name={item.icon} size={20} color={item.color} />
-            </View>
-            <View style={menuStyles.menuTextGroup}>
-              <Text style={[menuStyles.menuLabel, { color: item.color }]}>{item.label}</Text>
-              <Text style={menuStyles.menuSublabel}>{item.sublabel}</Text>
-            </View>
-            <Icon name="chevron-right" size={20} color="#cbd5e1" />
-          </TouchableOpacity>
-        ))}
-
-        {/* Cancel */}
-        <TouchableOpacity style={menuStyles.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-          <Text style={menuStyles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </Modal>
-  );
+const extractTagsFromContent = (content?: string | null) => {
+  if (!content) return [] as string[];
+  const matches = content.match(/#([A-Za-z0-9_\-]+)/g) ?? [];
+  const normalized = matches
+    .map((item) => item.replace('#', '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(normalized)).slice(0, 6);
 };
 
-const menuStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 34,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
-  },
-  handleWrap: {
-    alignItems: "center",
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#cbd5e1" },
-  previewRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 20, paddingVertical: 10, marginBottom: 4,
-    backgroundColor: "#f8fafc",
-    borderBottomWidth: 1, borderBottomColor: BORDER,
-  },
-  previewText: { flex: 1, fontSize: 12, color: TEXT_MUTED, fontWeight: "500" },
-  menuRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 20, paddingVertical: 16, gap: 14,
-  },
-  menuRowBorder: { borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
-  menuIconWrap: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: "center", justifyContent: "center",
-  },
-  menuTextGroup: { flex: 1 },
-  menuLabel: { fontSize: 15, fontWeight: "700" },
-  menuSublabel: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
-  cancelBtn: {
-    marginHorizontal: 20, marginTop: 10,
-    backgroundColor: "#f1f5f9", borderRadius: 14,
-    paddingVertical: 14, alignItems: "center",
-  },
-  cancelText: { fontSize: 15, fontWeight: "700", color: "#475569" },
-});
-
-// ─── Category data ────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "1", label: "Freelance Projects", count: 42, color: "#4ECDC4" },
-  { id: "2", label: "Startup Advice",     count: 31, color: "#45B7AA" },
-  { id: "3", label: "Mentorship Tips",    count: 27, color: "#9B7FD4" },
-  { id: "4", label: "Research",           count: 18, color: "#4A6D8C" },
-  { id: "5", label: "Internships",        count: 35, color: "#F59E0B" },
-  { id: "6", label: "Scholarships",       count: 22, color: "#10B981" },
-  { id: "7", label: "Volunteering",       count: 14, color: "#EF4444" },
-  { id: "8", label: "Design & UX",        count: 19, color: "#EC4899" },
-];
-
-// ─── FilterSheet ──────────────────────────────────────────────────────────────
-interface FilterSheetProps {
-  visible: boolean;
-  selected: string[];
-  onToggle: (id: string) => void;
-  onClear: () => void;
-  onApply: () => void;
-  onClose: () => void;
-}
-
-const FilterSheet = ({ visible, selected, onToggle, onClear, onApply, onClose }: FilterSheetProps) => {
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const dragY = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      dragY.setValue(0);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 150,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) dragY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || gs.vy > 0.8) {
-          Animated.timing(slideAnim, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(onClose);
-        } else {
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, damping: 20 }).start();
-        }
-      },
-    })
-  ).current;
-
-  const translateY = Animated.add(slideAnim, dragY);
-
-  return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={filterStyles.backdrop} activeOpacity={1} onPress={onClose} />
-      <Animated.View style={[filterStyles.sheet, { transform: [{ translateY }] }]}>
-        <View {...panResponder.panHandlers}>
-          <View style={filterStyles.handleWrap}>
-            <View style={filterStyles.handle} />
-          </View>
-          <View style={filterStyles.sheetHeader}>
-            <TouchableOpacity style={filterStyles.backBtn} onPress={onClose} activeOpacity={0.7}>
-              <Icon name="arrow-back" size={20} color="#ffffff" />
-            </TouchableOpacity>
-            <Text style={filterStyles.sheetTitle}>Browse Categories</Text>
-            {selected.length > 0
-              ? <TouchableOpacity onPress={onClear}>
-                  <Text style={filterStyles.clearAll}>Clear all</Text>
-                </TouchableOpacity>
-              : <View style={{ width: 60 }} />
-            }
-          </View>
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false} style={filterStyles.list}>
-          {CATEGORIES.map((cat) => {
-            const isSelected = selected.includes(cat.id);
-            return (
-              <TouchableOpacity
-                key={cat.id}
-                style={[filterStyles.row, isSelected && filterStyles.rowSelected]}
-                onPress={() => onToggle(cat.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[filterStyles.dot, { backgroundColor: cat.color }]} />
-                <Text style={[filterStyles.rowLabel, isSelected && filterStyles.rowLabelSelected]}>
-                  {cat.label}
-                </Text>
-                <View style={filterStyles.rowRight}>
-                  <View style={[filterStyles.badge, { backgroundColor: "#4A6D8C" }]}>
-                    <Text style={filterStyles.badgeText}>{cat.count}</Text>
-                  </View>
-                  {isSelected
-                    ? <View style={[filterStyles.checkCircle, { backgroundColor: cat.color }]}>
-                        <Icon name="check" size={13} color="#fff" />
-                      </View>
-                    : <Icon name="chevron-right" size={20} color="#94a3b8" />
-                  }
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={filterStyles.footer}>
-          <TouchableOpacity style={filterStyles.applyBtn} onPress={onApply} activeOpacity={0.85}>
-            <Text style={filterStyles.applyBtnText}>
-              Apply{selected.length > 0 ? ` (${selected.length})` : ""}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </Modal>
-  );
-};
-
-const filterStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 34,
-    maxHeight: SCREEN_HEIGHT * 0.68,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
-  },
-  handleWrap: {
-    backgroundColor: "#475569",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.4)" },
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#475569",
-  },
-  backBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  sheetTitle: {
-    fontSize: 13, fontWeight: "800", color: "#ffffff",
-    letterSpacing: 1.1, textTransform: "uppercase",
-    flex: 1, textAlign: "center",
-  },
-  clearAll: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
-  list: { paddingHorizontal: 20, paddingTop: 6 },
-  row: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 14, borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9", gap: 12,
-    borderRadius: 10, paddingHorizontal: 4,
-  },
-  rowSelected: { backgroundColor: "#f8fafc" },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  rowLabel: { flex: 1, fontSize: 15, fontWeight: "500", color: "#1e293b" },
-  rowLabelSelected: { fontWeight: "700", color: "#0f172a" },
-  rowRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  badge: { minWidth: 30, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, alignItems: "center" },
-  badgeText: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  checkCircle: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  footer: { paddingHorizontal: 20, paddingTop: 16 },
-  applyBtn: { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
-  applyBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-});
-
-// ─── Default seed comments ────────────────────────────────────────────────────
-const SEED_COMMENTS: Record<string, Comment[]> = {
-  "1": [
-    { id: "c1", author: "Sarah W.", avatar: "https://randomuser.me/api/portraits/women/44.jpg", text: "This platform looks amazing! Can't wait to explore.", time: "5d ago" },
-    { id: "c2", author: "Marcus C.", avatar: "https://randomuser.me/api/portraits/men/75.jpg", text: "Great initiative! Looking forward to connecting.", time: "4d ago" },
-  ],
-  "2": [
-    { id: "c3", author: "Elena", avatar: "https://randomuser.me/api/portraits/women/68.jpg", text: "AI ethics research is so important right now. Applied!", time: "4d ago" },
-  ],
-  "3": [],
-  "4": [
-    { id: "c4", author: "James", avatar: "https://randomuser.me/api/portraits/men/46.jpg", text: "Incredible scholarship opportunity. Sharing this with my network.", time: "1d ago" },
-  ],
-  "5": [],
-  "6": [
-    { id: "c5", author: "Dr. Alex", avatar: "https://randomuser.me/api/portraits/men/43.jpg", text: "Already working on my submission for this!", time: "3d ago" },
-  ],
-};
-
-// ─── OpportunityCard ──────────────────────────────────────────────────────────
-interface OpportunityCardProps extends Opportunity {
-  onCommentPress: () => void;
-  onMenuPress: () => void;
-  onSharePress: () => void;
-}
-
-const OpportunityCard = ({
-  title, daysAgo, description, author, authorAvatar,
-  likes = 0, comments = 0, tags = [], bullets = [],
-  onCommentPress, onMenuPress, onSharePress,
-}: OpportunityCardProps) => {
-  const [liked, setLiked] = useState(false);
-  const [disliked, setDisliked] = useState(false);
-  const [likeCount, setLikeCount] = useState(likes);
-
-  const handleLike = () => {
-    if (liked) { setLiked(false); setLikeCount(c => c - 1); }
-    else { setLiked(true); if (disliked) setDisliked(false); setLikeCount(c => c + 1); }
-  };
-  const handleDislike = () => {
-    if (disliked) { setDisliked(false); }
-    else { setDisliked(true); if (liked) { setLiked(false); setLikeCount(c => c - 1); } }
-  };
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardAuthorRow}>
-          {authorAvatar
-            ? <Image source={{ uri: authorAvatar }} style={styles.cardAvatar} />
-            : <View style={[styles.cardAvatar, styles.cardAvatarPlaceholder]}>
-                <Icon name="person" size={16} color="#fff" />
-              </View>
-          }
-          <View>
-            <Text style={styles.cardAuthorName}>{author ?? "Anonymous"}</Text>
-            <Text style={styles.cardMeta}>{daysAgo} · Edited</Text>
-          </View>
-        </View>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={onMenuPress}>
-          <Icon name="more-vert" size={19} color="#94a3b8" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardDescription}>{description}</Text>
-        {tags.length > 0 && (
-          <View style={styles.tagsRow}>
-            {tags.map((tag, i) => (
-              <View key={i} style={styles.tag}>
-                <Icon name="bolt" size={11} color={PRIMARY} />
-                <Text style={styles.tagText}>{tag}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {bullets.length > 0 && (
-          <View style={styles.bulletList}>
-            {bullets.map((b, i) => (
-              <View key={i} style={styles.bulletItem}>
-                <View style={styles.bullet} />
-                <Text style={styles.bulletText}>{b}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.cardFooter}>
-        <View style={styles.voteGroup}>
-          <TouchableOpacity onPress={handleLike} style={styles.voteBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Icon name="thumb-up" size={16} color={liked ? PRIMARY : "#64748b"} />
-          </TouchableOpacity>
-          <Text style={[styles.voteCount, liked && { color: PRIMARY }]}>{likeCount}</Text>
-          <View style={styles.voteDivider} />
-          <TouchableOpacity onPress={handleDislike} style={styles.voteBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Icon name="thumb-down" size={16} color={disliked ? "#ef4444" : "#64748b"} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.footerDivider} />
-        <TouchableOpacity style={styles.footerAction} onPress={onCommentPress}>
-          <Icon name="chat-bubble-outline" size={16} color={PRIMARY} />
-          <Text style={[styles.footerActionLabel, { color: PRIMARY }]}>{comments}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.footerAction} onPress={onSharePress}>
-          <Icon name="share" size={16} color="#94a3b8" />
-          <Text style={styles.footerActionLabel}>Share</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 const DiscoverScreen = () => {
   const navigation = useNavigation<any>();
-  const [filterVisible, setFilterVisible] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [searchText, setSearchText] = useState('');
+  const [posts, setPosts] = useState<PostItem[]>([]);
+  const [topProfiles, setTopProfiles] = useState<TopProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [commentModalVisible, setCommentModalVisible] = useState(false);
-  const [activePost, setActivePost] = useState<Opportunity | null>(null);
-  const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>(SEED_COMMENTS);
-  const [commentCountMap, setCommentCountMap] = useState<Record<string, number>>({
-    "1": 2, "2": 1, "3": 0, "4": 1, "5": 0, "6": 1,
-  });
+  const loadPosts = useCallback(async () => {
+    let { data, error } = await supabase
+      .from('posts')
+      .select(
+        'id, user_id, title, content, created_at, likes_count, comments_count, tags, profiles:user_id(id, full_name, username, avatar_url)',
+      )
+      .order('created_at', { ascending: false })
+      .limit(120);
 
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [menuPost, setMenuPost] = useState<Opportunity | null>(null);
+    if (error?.message?.toLowerCase().includes('tags')) {
+      const fallback = await supabase
+        .from('posts')
+        .select(
+          'id, user_id, title, content, created_at, likes_count, comments_count, profiles:user_id(id, full_name, username, avatar_url)',
+        )
+        .order('created_at', { ascending: false })
+        .limit(120);
+      data = fallback.data as any;
+      error = fallback.error;
+    }
 
-  // ── NEW: Share sheet state ──
-  const [shareVisible, setShareVisible] = useState(false);
-  const [sharePost, setSharePost] = useState<Opportunity | null>(null);
+    if (error) {
+      setPosts([]);
+      return;
+    }
 
-  const [hiddenPostIds, setHiddenPostIds] = useState<Set<string>>(new Set());
+    const mapped = (data ?? []).map((row: any) => ({
+      id: row.id,
+      user_id: row.user_id,
+      title: row.title,
+      content: row.content,
+      created_at: row.created_at,
+      likes_count: row.likes_count,
+      comments_count: row.comments_count,
+      tags: row.tags ?? null,
+      profile: row.profiles ?? null,
+    })) as PostItem[];
 
-  const toggleCategory = (id: string) => {
-    setSelectedCategories(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    setPosts(mapped);
+  }, []);
+
+  const loadTopProfiles = useCallback(async () => {
+    const { data: postRows, error: postError } = await supabase
+      .from('posts')
+      .select('user_id, likes_count');
+
+    if (postError || !postRows) {
+      setTopProfiles([]);
+      return;
+    }
+
+    const statsMap = new Map<string, { postsCount: number; likesTotal: number; score: number }>();
+    postRows.forEach((row: any) => {
+      const userId = row?.user_id;
+      if (!userId) return;
+      const current = statsMap.get(userId) ?? { postsCount: 0, likesTotal: 0, score: 0 };
+      const likes = Number(row?.likes_count ?? 0);
+      current.postsCount += 1;
+      current.likesTotal += likes;
+      current.score = current.postsCount + current.likesTotal;
+      statsMap.set(userId, current);
+    });
+
+    const rankedIds = Array.from(statsMap.entries())
+      .sort((a, b) => b[1].score - a[1].score)
+      .slice(0, 12)
+      .map(([id]) => id);
+
+    if (rankedIds.length === 0) {
+      setTopProfiles([]);
+      return;
+    }
+
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, avatar_url')
+      .in('id', rankedIds);
+
+    const profileMap = new Map<string, any>((profileRows ?? []).map((row: any) => [row.id, row]));
+
+    const orderedProfiles: TopProfile[] = rankedIds
+      .map((id, index) => {
+        const profile = profileMap.get(id);
+        if (!profile) return null;
+        const stats = statsMap.get(id)!;
+        return {
+          id,
+          name: profile.full_name ?? profile.username ?? 'Student',
+          avatar: profile.avatar_url ? { uri: profile.avatar_url } : getMaleAvatar(index % 5),
+          postsCount: stats.postsCount,
+          likesTotal: stats.likesTotal,
+          score: stats.score,
+        };
+      })
+      .filter(Boolean) as TopProfile[];
+
+    setTopProfiles(orderedProfiles);
+  }, []);
+
+  const loadDiscover = useCallback(
+    async (showLoader: boolean) => {
+      if (showLoader) setLoading(true);
+      await Promise.all([loadPosts(), loadTopProfiles()]);
+      if (showLoader) setLoading(false);
+    },
+    [loadPosts, loadTopProfiles],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDiscover(true);
+    }, [loadDiscover]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDiscover(false);
+    setRefreshing(false);
+  }, [loadDiscover]);
+
+  const filteredPosts = useMemo(() => {
+    const needle = searchText.trim().toLowerCase();
+    if (!needle) return posts;
+    return posts.filter((post) => {
+      const author = (post.profile?.full_name ?? post.profile?.username ?? '').toLowerCase();
+      return (
+        (post.title ?? '').toLowerCase().includes(needle) ||
+        (post.content ?? '').toLowerCase().includes(needle) ||
+        author.includes(needle)
+      );
+    });
+  }, [posts, searchText]);
+
+  const renderTopProfile = ({ item }: { item: TopProfile }) => (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={styles.profileChip}
+      onPress={() =>
+        navigation.navigate('UserProfile', {
+          userId: item.id,
+          name: item.name,
+          avatar: item.avatar,
+        })
+      }
+    >
+      <Image source={item.avatar} style={styles.profileAvatar} />
+      <Text style={styles.profileName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={styles.profileMeta}>{item.postsCount} posts • {item.likesTotal} likes</Text>
+    </TouchableOpacity>
+  );
+
+  const renderPost = ({ item }: { item: PostItem }) => {
+    const authorName = item.profile?.full_name ?? item.profile?.username ?? 'Student';
+    const authorAvatar = item.profile?.avatar_url ? { uri: item.profile.avatar_url } : getMaleAvatar(0);
+    const tags = (item.tags ?? []).length > 0 ? (item.tags ?? []) : extractTagsFromContent(item.content);
+
+    return (
+      <View style={styles.postCard}>
+        <View style={styles.postHeader}>
+          <View style={styles.authorRow}>
+            <Image source={authorAvatar} style={styles.authorAvatar} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.authorName}>{authorName}</Text>
+              <Text style={styles.authorMeta}>{formatRelativeTime(item.created_at)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <Text style={styles.postTitle}>{item.title?.trim() || 'Untitled Post'}</Text>
+        <Text style={styles.postBody}>{item.content?.trim() || 'No content added.'}</Text>
+
+        {tags.length > 0 ? (
+          <View style={styles.tagRow}>
+            {tags.slice(0, 6).map((tag) => (
+              <View key={`${item.id}-${tag}`} style={styles.tagChip}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.postFooter}>
+          <View style={styles.footerItem}>
+            <Icon name="thumb-up" size={15} color="#64748B" />
+            <Text style={styles.footerText}>{item.likes_count ?? 0}</Text>
+          </View>
+          <View style={styles.footerItem}>
+            <Icon name="chat-bubble-outline" size={15} color="#64748B" />
+            <Text style={styles.footerText}>{item.comments_count ?? 0}</Text>
+          </View>
+        </View>
+      </View>
     );
   };
-
-  const openComments = (post: Opportunity) => {
-    setActivePost(post);
-    setCommentModalVisible(true);
-  };
-
-  const openMenu = (post: Opportunity) => {
-    setMenuPost(post);
-    setMenuVisible(true);
-  };
-
-  // ── NEW: open custom ShareSheet instead of native Share ──
-  const handleShare = (post: Opportunity) => {
-    setSharePost(post);
-    setShareVisible(true);
-  };
-
-  const handleHidePost = () => {
-    if (!menuPost) return;
-    setHiddenPostIds(prev => new Set([...prev, menuPost.id]));
-    Alert.alert("Post hidden", "You'll see fewer posts like this.", [
-      { text: "Undo", onPress: () => setHiddenPostIds(prev => { const next = new Set(prev); next.delete(menuPost.id); return next; }) },
-      { text: "OK" },
-    ]);
-  };
-
-  const handleReportPost = () => {
-    if (!menuPost) return;
-    Alert.alert("Report post", "Why are you reporting this post?", [
-      { text: "Spam", onPress: () => Alert.alert("Reported", "Thanks for letting us know.") },
-      { text: "Misleading info", onPress: () => Alert.alert("Reported", "Thanks for letting us know.") },
-      { text: "Inappropriate content", onPress: () => Alert.alert("Reported", "Thanks for letting us know.") },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
-
-  const handleAddComment = (text: string) => {
-    if (!activePost) return;
-    const newComment: Comment = {
-      id: `c_${Date.now()}`,
-      author: "You",
-      avatar: "https://randomuser.me/api/portraits/lego/1.jpg",
-      text,
-      time: "Just now",
-    };
-    setCommentsMap(prev => ({ ...prev, [activePost.id]: [...(prev[activePost.id] ?? []), newComment] }));
-    setCommentCountMap(prev => ({ ...prev, [activePost.id]: (prev[activePost.id] ?? 0) + 1 }));
-  };
-
-  const profiles: Profile[] = [
-    { name: "Dr. Alex",  image: "https://randomuser.me/api/portraits/men/32.jpg" },
-    { name: "Sarah W.",  image: "https://randomuser.me/api/portraits/women/44.jpg" },
-    { name: "Marcus C.", image: "https://randomuser.me/api/portraits/men/75.jpg" },
-    { name: "Lisa K.",   image: "https://randomuser.me/api/portraits/women/65.jpg" },
-    { name: "James",     image: "https://randomuser.me/api/portraits/men/46.jpg" },
-    { name: "Elena",     image: "https://randomuser.me/api/portraits/women/68.jpg" },
-  ];
-
-  const opportunities: Opportunity[] = [
-    { id: "1", title: "🎉 Welcome to Discover 🎉", daysAgo: "6 days ago", description: "Hi there! 👋 Welcome to Discover. This is a community-driven platform built for sharing and growing together.", author: "intasham", authorAvatar: "https://randomuser.me/api/portraits/men/32.jpg", likes: 13, comments: 2, tags: ["Features"], bullets: ["Connect with local mentors", "Engagement through collaborative feeds"] },
-    { id: "2", title: "🔬 Summer Research Program: AI Ethics", daysAgo: "5 days ago", description: "Explore AI and human rights with funded research opportunities this summer.", author: "Dr. Alex", authorAvatar: "https://randomuser.me/api/portraits/men/43.jpg", likes: 28, comments: 1, tags: ["Research", "AI"], bullets: ["Fully funded program", "Open to all undergraduates"] },
-    { id: "3", title: "💼 Software Engineering Internship at TechCorp", daysAgo: "2 days ago", description: "Join our dev team to build scalable applications used by millions worldwide.", author: "Sarah W.", authorAvatar: "https://randomuser.me/api/portraits/women/44.jpg", likes: 41, comments: 0, tags: ["Internship", "Tech"], bullets: ["Paid position", "Remote friendly", "Mentorship included"] },
-    { id: "4", title: "📚 Scholarship: Women in STEM 2025", daysAgo: "1 day ago", description: "Applications now open for the annual Women in STEM scholarship worth $5,000.", author: "Lisa K.", authorAvatar: "https://randomuser.me/api/portraits/women/65.jpg", likes: 56, comments: 1, tags: ["Scholarship", "STEM"], bullets: ["Deadline: March 31", "Open internationally"] },
-    { id: "5", title: "🌍 NGO Volunteer Program — Global Health", daysAgo: "3 days ago", description: "Make an impact this summer with our global health volunteer program in 12 countries.", author: "Marcus C.", authorAvatar: "https://randomuser.me/api/portraits/men/75.jpg", likes: 34, comments: 0, tags: ["Volunteer", "Health"], bullets: ["3–6 month commitment", "Travel stipend provided"] },
-    { id: "6", title: "🎨 UX Design Challenge — Win $2,000", daysAgo: "4 days ago", description: "Submit your best UX work for a chance to win cash prizes and get hired by top studios.", author: "Elena", authorAvatar: "https://randomuser.me/api/portraits/women/68.jpg", likes: 22, comments: 1, tags: ["Design", "Competition"], bullets: ["Open to students & grads", "Top 3 get cash prizes"] },
-  ];
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
-      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Discover</Text>
-          <View style={styles.searchFilterRow}>
-            <View style={styles.headerSearchBar}>
-              <Icon name="search" size={18} color="#94a3b8" />
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Icon name="search" size={18} color="#94A3B8" />
               <TextInput
-                placeholder="Find your next opportunity..."
-                placeholderTextColor="#94a3b8"
-                style={styles.headerSearchInput}
+                value={searchText}
+                onChangeText={setSearchText}
+                style={styles.searchInput}
+                placeholder="Search posts, tags, people..."
+                placeholderTextColor="#94A3B8"
               />
             </View>
-            <TouchableOpacity style={styles.filterBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-              <Icon name="tune" size={20} color={PRIMARY} />
-            </TouchableOpacity>
           </View>
         </View>
 
-        <FlatList
-          data={opportunities.filter(o => !hiddenPostIds.has(o.id))}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          ListHeaderComponent={
-            <>
-              <View style={styles.communityCard}>
-                <View style={styles.profilesHeader}>
-                  <Text style={styles.profilesTitle}>Top Profiles</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("AllSeniors")}>
-                    <Text style={styles.viewAll}>View All</Text>
+        {loading ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="large" color={PRIMARY} />
+          </View>
+        ) : (
+          <FlatList
+            data={filteredPosts}
+            keyExtractor={(item) => item.id}
+            renderItem={renderPost}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            ListHeaderComponent={
+              <View style={styles.topProfilesCard}>
+                <View style={styles.topProfilesHeader}>
+                  <Text style={styles.topProfilesTitle}>Top Profiles</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('AllSeniors')}>
+                    <Text style={styles.viewAllText}>View All</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profilesScroll}>
-                  {profiles.map((p, i) => <ProfileAvatar key={i} name={p.name} image={p.image} />)}
-                </ScrollView>
+
+                {topProfiles.length === 0 ? (
+                  <Text style={styles.emptyTopText}>No ranked profiles yet. Publish posts to populate this list.</Text>
+                ) : (
+                  <FlatList
+                    data={topProfiles}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderTopProfile}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.profileListContent}
+                  />
+                )}
+
+                <Text style={styles.rankingHint}>Ranking = total posts + total likes</Text>
               </View>
-              <Text style={styles.opportunitiesTitle}>Opportunity</Text>
-            </>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.cardWrapper}>
-              <OpportunityCard
-                {...item}
-                comments={commentCountMap[item.id] ?? item.comments ?? 0}
-                onCommentPress={() => openComments(item)}
-                onMenuPress={() => openMenu(item)}
-                onSharePress={() => handleShare(item)}
-              />
-            </View>
-          )}
-        />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Icon name="inbox" size={38} color="#CBD5E1" />
+                <Text style={styles.emptyTitle}>No posts yet</Text>
+                <Text style={styles.emptySub}>Create the first post from the + button.</Text>
+              </View>
+            }
+          />
+        )}
 
-        <TouchableOpacity style={styles.fab} activeOpacity={0.85} onPress={() => navigation.navigate("CreatePost")}>
-          <Icon name="add" size={28} color="#fff" />
+        <TouchableOpacity style={styles.fab} activeOpacity={0.88} onPress={() => navigation.navigate('CreatePost')}>
+          <Icon name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
-
       </SafeAreaView>
-
-      <FilterSheet
-        visible={filterVisible}
-        selected={selectedCategories}
-        onToggle={toggleCategory}
-        onClear={() => setSelectedCategories([])}
-        onApply={() => setFilterVisible(false)}
-        onClose={() => setFilterVisible(false)}
-      />
-
-      <CommentModal
-        visible={commentModalVisible}
-        onClose={() => setCommentModalVisible(false)}
-        title={activePost?.title ?? ""}
-        comments={activePost ? (commentsMap[activePost.id] ?? []) : []}
-        onAddComment={handleAddComment}
-      />
-
-      <PostMenuSheet
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        onHide={handleHidePost}
-        onReport={handleReportPost}
-        postTitle={menuPost?.title ?? ""}
-      />
-
-      {/* ── NEW: Custom Share Sheet ── */}
-      <ShareSheet
-        visible={shareVisible}
-        onClose={() => setShareVisible(false)}
-        post={sharePost}
-      />
     </View>
   );
 };
 
 export default DiscoverScreen;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: PRIMARY },
   header: {
-    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 16,
-    backgroundColor: PRIMARY, alignItems: "flex-start",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 14,
+    backgroundColor: PRIMARY,
   },
-  headerTitle: { color: "#fff", fontSize: 30, fontWeight: "800", letterSpacing: -0.5, textAlign: "left", marginBottom: 12 },
-  searchFilterRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 10 },
-  headerSearchBar: {
-    flex: 1, flexDirection: "row", alignItems: "center",
-    backgroundColor: "#ffffff", borderRadius: 25,
-    paddingHorizontal: 14, paddingVertical: 10,
-    shadowColor: "#000", shadowOpacity: 0.08, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, elevation: 3,
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginBottom: 10,
   },
-  headerSearchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: "#0f172a", paddingVertical: 0 },
-  filterBtn: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: "#ffffff",
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOpacity: 0.08, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, elevation: 3,
+  searchRow: { flexDirection: 'row' },
+  searchBox: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
-  listContent: { backgroundColor: BG, paddingBottom: 100, paddingTop: 12 },
-  communityCard: {
-    backgroundColor: CARD_BG, marginHorizontal: 14, borderRadius: 14,
-    padding: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 14,
-    shadowColor: "#000", shadowOpacity: 0.04, shadowOffset: { width: 0, height: 1 }, shadowRadius: 4, elevation: 1,
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    color: TEXT_DARK,
+    fontSize: 13,
   },
-  profilesHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  profilesTitle: { fontSize: 11, fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: 0.4 },
-  viewAll: { fontSize: 12, fontWeight: "600", color: PRIMARY },
-  profilesScroll: { gap: 14, paddingVertical: 2 },
-  avatarWrapper: { alignItems: "center", width: 50 },
-  avatarRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: `${PRIMARY}40`, padding: 2 },
-  avatarImage: { width: "100%", height: "100%", borderRadius: 20 },
-  avatarName: { marginTop: 5, fontSize: 10, fontWeight: "500", color: TEXT_MUTED, textAlign: "center" },
-  opportunitiesTitle: { fontSize: 18, fontWeight: "700", color: TEXT_MAIN, paddingHorizontal: 16, paddingBottom: 10 },
-  cardWrapper: { paddingHorizontal: 14 },
-  card: {
-    backgroundColor: CARD_BG, borderRadius: 16, borderWidth: 1, borderColor: BORDER, overflow: "hidden",
-    shadowColor: "#000", shadowOpacity: 0.04, shadowOffset: { width: 0, height: 1 }, shadowRadius: 4, elevation: 1,
+  loaderWrap: {
+    flex: 1,
+    backgroundColor: BG,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
-  cardAuthorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardAvatar: { width: 34, height: 34, borderRadius: 17 },
-  cardAvatarPlaceholder: { backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
-  cardAuthorName: { fontSize: 13, fontWeight: "700", color: TEXT_MAIN },
-  cardMeta: { fontSize: 10, color: TEXT_MUTED, marginTop: 1 },
-  cardBody: { paddingHorizontal: 14, paddingBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: "700", color: TEXT_MAIN, marginBottom: 5 },
-  cardDescription: { fontSize: 13, lineHeight: 19, color: "#475569" },
-  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 9 },
-  tag: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, gap: 3 },
-  tagText: { fontSize: 10, fontWeight: "700", color: PRIMARY },
-  bulletList: { marginTop: 9, gap: 5 },
-  bulletItem: { flexDirection: "row", alignItems: "center", gap: 7 },
-  bullet: { width: 4, height: 4, borderRadius: 2, backgroundColor: PRIMARY },
-  bulletText: { fontSize: 12, color: TEXT_MUTED },
-  cardFooter: { flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: BORDER, paddingHorizontal: 14, paddingVertical: 10, gap: 14 },
-  voteGroup: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", borderRadius: 99, paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
-  voteBtn: { padding: 0 },
-  voteDivider: { width: 1, height: 14, backgroundColor: "#cbd5e1" },
-  voteCount: { fontSize: 12, fontWeight: "700", color: TEXT_MUTED, minWidth: 16, textAlign: "center" },
-  footerDivider: { width: 1, height: 16, backgroundColor: BORDER },
-  footerAction: { flexDirection: "row", alignItems: "center", gap: 5 },
-  footerActionLabel: { fontSize: 12, fontWeight: "600", color: TEXT_MUTED },
+  listContent: {
+    backgroundColor: BG,
+    padding: 14,
+    paddingBottom: 100,
+    gap: 10,
+  },
+  topProfilesCard: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 6,
+  },
+  topProfilesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  topProfilesTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
+  profileListContent: { gap: 10 },
+  profileChip: {
+    width: 132,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    marginRight: 10,
+  },
+  profileAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginBottom: 8,
+  },
+  profileName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: TEXT_DARK,
+  },
+  profileMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  rankingHint: {
+    marginTop: 10,
+    fontSize: 11,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  emptyTopText: {
+    color: TEXT_MUTED,
+    fontSize: 12,
+  },
+  postCard: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+  },
+  postHeader: { marginBottom: 8 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  authorAvatar: { width: 34, height: 34, borderRadius: 17 },
+  authorName: { fontSize: 13, fontWeight: '700', color: TEXT_DARK },
+  authorMeta: { marginTop: 1, fontSize: 10, color: TEXT_MUTED },
+  postTitle: { fontSize: 15, fontWeight: '800', color: TEXT_DARK, marginBottom: 4 },
+  postBody: { fontSize: 13, lineHeight: 19, color: '#334155' },
+  tagRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tagChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 99,
+    backgroundColor: '#E8F0F7',
+  },
+  tagText: { fontSize: 11, fontWeight: '700', color: '#1B4B7E' },
+  postFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F7',
+    paddingTop: 10,
+  },
+  footerItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  footerText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '700' },
+  emptyWrap: { alignItems: 'center', marginTop: 44 },
+  emptyTitle: { marginTop: 10, fontSize: 16, fontWeight: '800', color: '#334155' },
+  emptySub: { marginTop: 4, fontSize: 12, color: '#94A3B8' },
   fab: {
-    position: "absolute", bottom: 30, right: 24,
-    width: 56, height: 56, borderRadius: 28, backgroundColor: PRIMARY,
-    alignItems: "center", justifyContent: "center",
-    shadowColor: PRIMARY, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 5 }, shadowRadius: 12, elevation: 8,
+    position: 'absolute',
+    right: 22,
+    bottom: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });

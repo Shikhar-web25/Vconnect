@@ -195,6 +195,22 @@ const DmsScreen = () => {
         return;
       }
 
+      let unreadCountBySender = new Map<string, number>();
+      const { data: unreadRows, error: unreadError } = await supabase
+        .from('messages')
+        .select('sender_id')
+        .eq('receiver_id', userId)
+        .eq('read_status', false)
+        .in('sender_id', otherIds);
+
+      if (!unreadError && unreadRows) {
+        unreadRows.forEach((row: any) => {
+          const senderId = row?.sender_id;
+          if (!senderId) return;
+          unreadCountBySender.set(senderId, (unreadCountBySender.get(senderId) ?? 0) + 1);
+        });
+      }
+
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, username, avatar_url, bio, year_of_study')
@@ -214,7 +230,7 @@ const DmsScreen = () => {
           message: convo?.last_message ?? 'Start a conversation',
           time: formatTime(convo?.last_message_at),
           avatar: toImageSource(profileData?.avatar_url ?? fallbackAvatar),
-          unreadCount: 0,
+          unreadCount: unreadCountBySender.get(id) ?? 0,
           pinned: false,
           batch: profileData?.year_of_study ? `${profileData.year_of_study}` : 'NA',
           about: profileData?.bio ?? 'Vconnect Student',
@@ -283,6 +299,11 @@ const DmsScreen = () => {
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+          () => loadChats(false, user.id),
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
           () => loadChats(false, user.id),
         )
         .subscribe();

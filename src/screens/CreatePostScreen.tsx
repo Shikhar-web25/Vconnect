@@ -1,392 +1,368 @@
-import React, { useState, useRef } from "react";
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
   ScrollView,
   StatusBar,
-  Animated,
-  Platform,
-  Alert,
-  Image,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import Icon from "react-native-vector-icons/MaterialIcons";
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { supabase } from '../../supabaseClient';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const PRIMARY = "#4A6D8C";
-const BG = "#f1f5f9";
-const CARD_BG = "#ffffff";
-const TEXT_MAIN = "#0f172a";
-const TEXT_MUTED = "#64748b";
-const BORDER = "#e2e8f0";
-const ACCENT = "#FFFFF0";          // Ivory
-const ACCENT_BORDER = "#C8C87A";   // Ivory border
-const ACCENT_TEXT = "#4A4A00";     // Dark text for ivory bg
+const PRIMARY = '#4A6D8C';
+const BG = '#F1F5F9';
+const CARD = '#FFFFFF';
+const TEXT_DARK = '#0F172A';
+const TEXT_MUTED = '#64748B';
 
-// ─── Tag options (mirrors the app's categories) ───────────────────────────────
-const TAG_OPTIONS = [
-  { label: "Research",    color: "#4A6D8C" },
-  { label: "AI",          color: "#6366f1" },
-  { label: "Internship",  color: "#F59E0B" },
-  { label: "Tech",        color: "#3b82f6" },
-  { label: "Scholarship", color: "#10B981" },
-  { label: "STEM",        color: "#8b5cf6" },
-  { label: "Volunteer",   color: "#EF4444" },
-  { label: "Health",      color: "#ec4899" },
-  { label: "Design",      color: "#EC4899" },
-  { label: "Features",    color: "#4ECDC4" },
-  { label: "Marketing",   color: "#f97316" },
-  { label: "Career",      color: "#06b6d4" },
+const DEFAULT_TAGS = [
+  'Research',
+  'Internship',
+  'Scholarship',
+  'Volunteer',
+  'Event',
+  'Hackathon',
+  'Career',
+  'Announcements',
 ];
 
-const MAX_BULLETS = 5;
-const MAX_TAGS = 3;
+const normalizeTag = (value: string) =>
+  value
+    .trim()
+    .replace(/^#+/, '')
+    .replace(/\s+/g, '-')
+    .toLowerCase();
 
 const CreatePostScreen = () => {
   const navigation = useNavigation<any>();
 
-  // ── Form state ──
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [bullets, setBullets] = useState<string[]>([""]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [step, setStep] = useState<1 | 2>(1);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [highlights, setHighlights] = useState<string[]>(['']);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [publishing, setPublishing] = useState(false);
 
-  // ── Animated progress bar ──
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const availableTags = useMemo(
+    () => Array.from(new Set([...DEFAULT_TAGS, ...customTags])),
+    [customTags],
+  );
 
-  React.useEffect(() => {
-    Animated.spring(progressAnim, {
-      toValue: step === 1 ? 0.5 : 1,
-      useNativeDriver: false,
-      damping: 18,
-      stiffness: 120,
-    }).start();
-  }, [step]);
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
-
-  // ── Bullet helpers ──
-  const updateBullet = (text: string, idx: number) => {
-    setBullets(prev => prev.map((b, i) => (i === idx ? text : b)));
+  const addHighlight = () => {
+    if (highlights.length >= 6) return;
+    setHighlights((prev) => [...prev, '']);
   };
 
-  const addBullet = () => {
-    if (bullets.length < MAX_BULLETS) setBullets(prev => [...prev, ""]);
+  const removeHighlight = (index: number) => {
+    if (highlights.length === 1) {
+      setHighlights(['']);
+      return;
+    }
+    setHighlights((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const removeBullet = (idx: number) => {
-    if (bullets.length === 1) { setBullets([""]); return; }
-    setBullets(prev => prev.filter((_, i) => i !== idx));
+  const updateHighlight = (value: string, index: number) => {
+    setHighlights((prev) => prev.map((item, i) => (i === index ? value : item)));
   };
 
-  // ── Tag toggle ──
-  const toggleTag = (label: string) => {
-    setSelectedTags(prev =>
-      prev.includes(label)
-        ? prev.filter(t => t !== label)
-        : prev.length < MAX_TAGS
-        ? [...prev, label]
-        : prev
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
     );
   };
 
-  // ── Validation ──
-  const isStep1Valid = title.trim().length > 0 && description.trim().length > 0;
+  const addCustomTag = () => {
+    const normalized = normalizeTag(customTagInput);
+    if (!normalized) return;
+    const display = normalized
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join('-');
 
-  const handlePublish = () => {
-    Alert.alert(
-      "Post Published! 🎉",
-      "Your blog post is now live on Discover.",
-      [{ text: "Okay", onPress: () => navigation.goBack() }]
-    );
+    if (!availableTags.some((tag) => tag.toLowerCase() === display.toLowerCase())) {
+      setCustomTags((prev) => [...prev, display]);
+    }
+    if (!selectedTags.some((tag) => tag.toLowerCase() === display.toLowerCase())) {
+      setSelectedTags((prev) => [...prev, display]);
+    }
+    setCustomTagInput('');
   };
 
-  const handleDiscard = () => {
-    if (!title && !description) { navigation.goBack(); return; }
-    Alert.alert("Discard post?", "Your draft will be lost.", [
-      { text: "Keep editing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: () => navigation.goBack() },
+  const normalizedTags = selectedTags.map(normalizeTag).filter(Boolean);
+  const cleanedHighlights = highlights.map((item) => item.trim()).filter(Boolean);
+
+  const buildContent = (appendHashtags: boolean) => {
+    const lines: string[] = [];
+    if (description.trim()) lines.push(description.trim());
+    if (cleanedHighlights.length > 0) {
+      lines.push('');
+      cleanedHighlights.forEach((item) => lines.push(`• ${item}`));
+    }
+    if (appendHashtags && normalizedTags.length > 0) {
+      lines.push('');
+      lines.push(normalizedTags.map((tag) => `#${tag}`).join(' '));
+    }
+    return lines.join('\n').trim();
+  };
+
+  const handlePublish = async () => {
+    if (!title.trim()) {
+      Alert.alert('Title required', 'Please add a post title.');
+      return;
+    }
+    if (!description.trim()) {
+      Alert.alert('Description required', 'Please add post content before publishing.');
+      return;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      Alert.alert('Not logged in', 'Please log in again and retry.');
+      return;
+    }
+
+    setPublishing(true);
+
+    const basePayload: Record<string, any> = {
+      user_id: user.id,
+      title: title.trim(),
+      content: buildContent(false),
+      likes_count: 0,
+      comments_count: 0,
+    };
+
+    let { error } = await supabase.from('posts').insert({
+      ...basePayload,
+      tags: normalizedTags,
+    });
+
+    if (error?.message?.toLowerCase().includes('tags')) {
+      const fallback = await supabase.from('posts').insert({
+        ...basePayload,
+        content: buildContent(true),
+      });
+      error = fallback.error;
+    }
+
+    setPublishing(false);
+
+    if (error) {
+      Alert.alert('Publish failed', error.message);
+      return;
+    }
+
+    Alert.alert('Posted', 'Your discover post is now live.', [
+      {
+        text: 'OK',
+        onPress: () => navigation.goBack(),
+      },
     ]);
   };
 
-  const filledBullets = bullets.filter(b => b.trim());
+  const canGoPreview = title.trim().length > 0 && description.trim().length > 0;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
-      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-
-        {/* ── Header ── */}
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={handleDiscard}>
-            <Icon name="close" size={22} color="#fff" />
+          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Icon name="arrow-back" size={21} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>
-              {step === 1 ? "Create Post" : "Preview"}
-            </Text>
-            <Text style={styles.headerSub}>Step {step} of 2</Text>
+            <Text style={styles.headerTitle}>{step === 1 ? 'Create Post' : 'Preview Post'}</Text>
+            <Text style={styles.headerSubtitle}>Step {step} of 2</Text>
           </View>
 
           {step === 1 ? (
             <TouchableOpacity
-              style={[styles.headerActionBtn, !isStep1Valid && styles.headerActionBtnDisabled]}
-              onPress={() => isStep1Valid && setStep(2)}
-              disabled={!isStep1Valid}
+              style={[styles.headerAction, !canGoPreview && styles.headerActionDisabled]}
+              disabled={!canGoPreview}
+              onPress={() => setStep(2)}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.headerActionText, !isStep1Valid && { opacity: 0.45 }]}>
-                Next
-              </Text>
-              <Icon name="arrow-forward" size={16} color={isStep1Valid ? "#fff" : "rgba(255,255,255,0.45)"} />
+              <Text style={styles.headerActionText}>Preview</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
-              <Icon name="send" size={15} color={ACCENT_TEXT} />
-              <Text style={styles.publishBtnText}>Publish</Text>
+            <TouchableOpacity style={styles.headerAction} onPress={handlePublish} activeOpacity={0.85} disabled={publishing}>
+              {publishing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.headerActionText}>Post</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
 
-        {/* ── Progress bar ── */}
-        <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
-        </View>
-
-        {/* ── Step pills ── */}
-        <View style={styles.stepRow}>
-          {(["Content", "Preview"] as const).map((label, i) => {
-            const active = step === i + 1;
-            return (
-              <TouchableOpacity
-                key={label}
-                style={[styles.stepPill, active && styles.stepPillActive]}
-                onPress={() => { if (i === 1 && !isStep1Valid) return; setStep((i + 1) as 1 | 2); }}
-              >
-                <View style={[styles.stepNum, active && styles.stepNumActive]}>
-                  <Text style={[styles.stepNumText, active && styles.stepNumTextActive]}>{i + 1}</Text>
-                </View>
-                <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* ══════════════════ STEP 1 — CONTENT ══════════════════ */}
-        {step === 1 && (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Title */}
+        {step === 1 ? (
+          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
             <View style={styles.section}>
-              <View style={styles.sectionLabelRow}>
-                <Icon name="title" size={15} color={PRIMARY} />
-                <Text style={styles.sectionLabel}>Post Title <Text style={styles.required}>*</Text></Text>
-              </View>
+              <Text style={styles.label}>Post Title</Text>
               <TextInput
-                style={styles.titleInput}
-                placeholder="Give your post a catchy title..."
-                placeholderTextColor="#94a3b8"
                 value={title}
                 onChangeText={setTitle}
-                maxLength={100}
-                multiline
+                placeholder="Write a strong title"
+                placeholderTextColor="#94A3B8"
+                style={styles.input}
+                maxLength={120}
               />
-              <Text style={styles.charCount}>{title.length}/100</Text>
             </View>
 
-            {/* Description */}
             <View style={styles.section}>
-              <View style={styles.sectionLabelRow}>
-                <Icon name="notes" size={15} color={PRIMARY} />
-                <Text style={styles.sectionLabel}>Description <Text style={styles.required}>*</Text></Text>
-              </View>
+              <Text style={styles.label}>Description</Text>
               <TextInput
-                style={styles.descInput}
-                placeholder="Write a compelling description of your post..."
-                placeholderTextColor="#94a3b8"
                 value={description}
                 onChangeText={setDescription}
-                maxLength={400}
+                placeholder="Describe your post in detail"
+                placeholderTextColor="#94A3B8"
+                style={[styles.input, styles.multiline]}
                 multiline
                 textAlignVertical="top"
+                maxLength={1200}
               />
-              <Text style={styles.charCount}>{description.length}/400</Text>
             </View>
 
-            {/* Tags */}
             <View style={styles.section}>
-              <View style={styles.sectionLabelRow}>
-                <Icon name="bolt" size={15} color={PRIMARY} />
-                <Text style={styles.sectionLabel}>Tags</Text>
-                <Text style={styles.sectionHint}>(up to {MAX_TAGS})</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.label}>Tags</Text>
+                <Text style={styles.smallHint}>Select existing or add your own</Text>
               </View>
               <View style={styles.tagsWrap}>
-                {TAG_OPTIONS.map((t) => {
-                  const sel = selectedTags.includes(t.label);
+                {availableTags.map((tag) => {
+                  const selected = selectedTags.includes(tag);
                   return (
                     <TouchableOpacity
-                      key={t.label}
-                      style={[
-                        styles.tagChip,
-                        sel && { backgroundColor: t.color, borderColor: t.color },
-                        !sel && selectedTags.length >= MAX_TAGS && styles.tagChipDisabled,
-                      ]}
-                      onPress={() => toggleTag(t.label)}
-                      activeOpacity={0.75}
+                      key={tag}
+                      activeOpacity={0.85}
+                      style={[styles.tagButton, selected && styles.tagButtonSelected]}
+                      onPress={() => toggleTag(tag)}
                     >
-                      {sel && <Icon name="check" size={11} color="#fff" />}
-                      <Text style={[styles.tagChipText, sel && { color: "#fff" }]}>{t.label}</Text>
+                      <Text style={[styles.tagButtonText, selected && styles.tagButtonTextSelected]}>#{tag}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              <View style={styles.addTagRow}>
+                <TextInput
+                  value={customTagInput}
+                  onChangeText={setCustomTagInput}
+                  placeholder="Add new tag"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.addTagInput}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity style={styles.addTagBtn} onPress={addCustomTag} activeOpacity={0.85}>
+                  <Icon name="add" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Bullet points */}
             <View style={styles.section}>
-              <View style={styles.sectionLabelRow}>
-                <Icon name="format-list-bulleted" size={15} color={PRIMARY} />
-                <Text style={styles.sectionLabel}>Key Highlights</Text>
-                <Text style={styles.sectionHint}>(up to {MAX_BULLETS})</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.label}>Highlights (Optional)</Text>
+                <TouchableOpacity onPress={addHighlight} activeOpacity={0.8}>
+                  <Text style={styles.addHighlightText}>+ Add</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sectionDesc}>Add short bullet points that summarize the key details.</Text>
 
-              {bullets.map((b, i) => (
-                <View key={i} style={styles.bulletRow}>
+              {highlights.map((item, index) => (
+                <View key={`hl-${index}`} style={styles.highlightRow}>
                   <View style={styles.bulletDot} />
                   <TextInput
-                    style={styles.bulletInput}
-                    placeholder={`Highlight ${i + 1}...`}
-                    placeholderTextColor="#94a3b8"
-                    value={b}
-                    onChangeText={t => updateBullet(t, i)}
-                    maxLength={80}
+                    value={item}
+                    onChangeText={(value) => updateHighlight(value, index)}
+                    placeholder={`Highlight ${index + 1}`}
+                    placeholderTextColor="#94A3B8"
+                    style={styles.highlightInput}
                   />
-                  <TouchableOpacity onPress={() => removeBullet(i)} style={styles.bulletRemove}>
-                    <Icon name="remove-circle-outline" size={19} color="#94a3b8" />
+                  <TouchableOpacity onPress={() => removeHighlight(index)} activeOpacity={0.75}>
+                    <Icon name="close" size={18} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
               ))}
-
-              {bullets.length < MAX_BULLETS && (
-                <TouchableOpacity style={styles.addBulletBtn} onPress={addBullet}>
-                  <Icon name="add-circle-outline" size={18} color={PRIMARY} />
-                  <Text style={styles.addBulletText}>Add highlight</Text>
-                </TouchableOpacity>
-              )}
             </View>
-
-            <View style={{ height: 40 }} />
           </ScrollView>
-        )}
+        ) : (
+          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
+            <Text style={styles.previewHint}>This is how your post will look on Discover.</Text>
 
-        {/* ══════════════════ STEP 2 — PREVIEW ══════════════════ */}
-        {step === 2 && (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={styles.previewHint}>
-              This is how your post will appear in the feed.
-            </Text>
-
-            {/* ── Simulated card ── */}
             <View style={styles.previewCard}>
-
-              {/* Card header */}
-              <View style={styles.previewCardHeader}>
-                <View style={styles.previewAuthorRow}>
-                  <Image
-                    source={{ uri: "https://randomuser.me/api/portraits/lego/1.jpg" }}
-                    style={styles.previewAvatar}
-                  />
-                  <View>
-                    <Text style={styles.previewAuthorName}>You</Text>
-                    <Text style={styles.previewMeta}>Just now · Draft</Text>
-                  </View>
+              <View style={styles.previewHeader}>
+                <View style={styles.previewAvatar}>
+                  <Icon name="person" size={16} color="#FFFFFF" />
                 </View>
-                <Icon name="more-vert" size={19} color="#94a3b8" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewAuthor}>You</Text>
+                  <Text style={styles.previewMeta}>Just now</Text>
+                </View>
               </View>
 
-              {/* Card body */}
-              <View style={styles.previewCardBody}>
-                <Text style={styles.previewTitle}>{title || "Your post title will appear here"}</Text>
-                <Text style={styles.previewDescription}>
-                  {description || "Your description will appear here..."}
-                </Text>
+              <Text style={styles.previewTitle}>{title.trim() || 'Untitled Post'}</Text>
+              <Text style={styles.previewDescription}>{description.trim()}</Text>
 
-                {selectedTags.length > 0 && (
-                  <View style={styles.previewTagsRow}>
-                    {selectedTags.map((tag, i) => (
-                      <View key={i} style={styles.previewTag}>
-                        <Icon name="bolt" size={11} color={PRIMARY} />
-                        <Text style={styles.previewTagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {filledBullets.length > 0 && (
-                  <View style={styles.previewBullets}>
-                    {filledBullets.map((b, i) => (
-                      <View key={i} style={styles.previewBulletRow}>
-                        <View style={styles.previewBulletDot} />
-                        <Text style={styles.previewBulletText}>{b}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Card footer */}
-              <View style={styles.previewCardFooter}>
-                <View style={styles.previewVoteGroup}>
-                  <Icon name="thumb-up" size={15} color="#64748b" />
-                  <Text style={styles.previewVoteCount}>0</Text>
-                  <View style={styles.previewVoteDivider} />
-                  <Icon name="thumb-down" size={15} color="#64748b" />
+              {selectedTags.length > 0 ? (
+                <View style={styles.previewTagsWrap}>
+                  {selectedTags.map((tag) => (
+                    <View key={`preview-${tag}`} style={styles.previewTag}>
+                      <Text style={styles.previewTagText}>#{tag}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.previewFooterDivider} />
-                <View style={styles.previewFooterAction}>
-                  <Icon name="chat-bubble-outline" size={15} color={PRIMARY} />
-                  <Text style={[styles.previewFooterLabel, { color: PRIMARY }]}>0</Text>
+              ) : null}
+
+              {cleanedHighlights.length > 0 ? (
+                <View style={styles.previewHighlightsWrap}>
+                  {cleanedHighlights.map((item, index) => (
+                    <View key={`preview-hl-${index}`} style={styles.previewHighlightRow}>
+                      <View style={styles.previewDot} />
+                      <Text style={styles.previewHighlightText}>{item}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.previewFooterAction}>
-                  <Icon name="share" size={15} color="#94a3b8" />
-                  <Text style={styles.previewFooterLabel}>Share</Text>
+              ) : null}
+
+              <View style={styles.previewFooter}>
+                <View style={styles.previewFooterItem}>
+                  <Icon name="thumb-up" size={15} color={TEXT_MUTED} />
+                  <Text style={styles.previewFooterText}>0</Text>
+                </View>
+                <View style={styles.previewFooterItem}>
+                  <Icon name="chat-bubble-outline" size={15} color={TEXT_MUTED} />
+                  <Text style={styles.previewFooterText}>0</Text>
                 </View>
               </View>
             </View>
 
-            {/* ── Edit reminder ── */}
-            <TouchableOpacity style={styles.editReminderBtn} onPress={() => setStep(1)}>
+            <TouchableOpacity style={styles.backEditBtn} onPress={() => setStep(1)} activeOpacity={0.85}>
               <Icon name="edit" size={16} color={PRIMARY} />
-              <Text style={styles.editReminderText}>Go back and edit</Text>
+              <Text style={styles.backEditText}>Back to edit</Text>
             </TouchableOpacity>
 
-            {/* ── Publish CTA (big) ── */}
-            <TouchableOpacity style={styles.bigPublishBtn} onPress={handlePublish} activeOpacity={0.88}>
-              <Icon name="send" size={20} color={ACCENT_TEXT} />
-              <Text style={styles.bigPublishBtnText}>Publish to Discover</Text>
+            <TouchableOpacity style={styles.publishBtn} onPress={handlePublish} activeOpacity={0.88} disabled={publishing}>
+              {publishing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Icon name="send" size={18} color="#FFFFFF" />
+                  <Text style={styles.publishBtnText}>Publish to Discover</Text>
+                </>
+              )}
             </TouchableOpacity>
-
-            <View style={{ height: 40 }} />
           </ScrollView>
         )}
-
       </SafeAreaView>
     </View>
   );
@@ -394,467 +370,264 @@ const CreatePostScreen = () => {
 
 export default CreatePostScreen;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: PRIMARY,
-  },
-
-  // ── Header ──
+  container: { flex: 1, backgroundColor: PRIMARY },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "android" ? 12 : 8,
+    paddingTop: 8,
     paddingBottom: 14,
     backgroundColor: PRIMARY,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  headerIconBtn: {
+  headerIcon: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  headerCenter: {
-    alignItems: "center",
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  headerSubtitle: { marginTop: 1, color: 'rgba(255,255,255,0.75)', fontSize: 11 },
+  headerAction: {
+    minWidth: 72,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
   },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.65)",
-    fontSize: 11,
-    marginTop: 1,
-  },
-  headerActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  headerActionBtnDisabled: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
-  headerActionText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  publishBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: ACCENT,
-    borderWidth: 1,
-    borderColor: ACCENT_BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  publishBtnText: {
-    color: ACCENT_TEXT,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  // ── Progress bar ──
-  progressTrack: {
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  progressFill: {
-    height: 3,
-    backgroundColor: ACCENT,
-    borderRadius: 2,
-  },
-
-  // ── Step pills ──
-  stepRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 10,
-    backgroundColor: PRIMARY,
-  },
-  stepPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 99,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  stepPillActive: {
-    backgroundColor: "rgba(255,255,255,0.22)",
-  },
-  stepNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepNumActive: {
-    backgroundColor: ACCENT,
-  },
-  stepNumText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.7)",
-  },
-  stepNumTextActive: {
-    color: ACCENT_TEXT,
-  },
-  stepLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.6)",
-  },
-  stepLabelActive: {
-    color: "#fff",
-  },
-
-  // ── Scroll ──
-  scroll: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 30,
-  },
-
-  // ── Section ──
+  headerActionDisabled: { opacity: 0.5 },
+  headerActionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  body: { flex: 1, backgroundColor: BG },
+  bodyContent: { padding: 16, paddingBottom: 34, gap: 14 },
   section: {
-    marginBottom: 22,
+    backgroundColor: CARD,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
   },
-  sectionLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  sectionLabel: {
+  label: {
     fontSize: 13,
-    fontWeight: "700",
-    color: TEXT_MAIN,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    fontWeight: '800',
+    color: '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
-  required: {
-    color: "#ef4444",
+  smallHint: { fontSize: 11, color: TEXT_MUTED },
+  input: {
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: '#D6DEED',
+    paddingHorizontal: 12,
+    color: TEXT_DARK,
+    backgroundColor: '#F8FAFF',
   },
-  sectionHint: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    fontWeight: "500",
-  },
-  sectionDesc: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    marginBottom: 10,
-    lineHeight: 17,
-  },
-
-  // ── Inputs ──
-  titleInput: {
-    backgroundColor: CARD_BG,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 16,
-    fontWeight: "700",
-    color: TEXT_MAIN,
-    lineHeight: 22,
-  },
-  descInput: {
-    backgroundColor: CARD_BG,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 14,
-    color: TEXT_MAIN,
-    lineHeight: 21,
+  multiline: {
     minHeight: 110,
+    height: 110,
+    paddingTop: 10,
+    textAlignVertical: 'top',
   },
-  charCount: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-    textAlign: "right",
-    marginTop: 5,
-  },
-
-  // ── Tags ──
   tagsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  tagChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 99,
-    backgroundColor: CARD_BG,
-    borderWidth: 1.5,
-    borderColor: BORDER,
+  tagButton: {
+    borderRadius: 999,
+    borderWidth: 1.2,
+    borderColor: '#D6DEED',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    backgroundColor: '#F8FAFF',
   },
-  tagChipDisabled: {
-    opacity: 0.4,
+  tagButtonSelected: {
+    borderColor: PRIMARY,
+    backgroundColor: '#E8F0F7',
   },
-  tagChipText: {
+  tagButtonText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: TEXT_MUTED,
+    color: '#475569',
+    fontWeight: '700',
   },
-
-  // ── Bullets ──
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+  tagButtonTextSelected: {
+    color: '#1B4B7E',
+  },
+  addTagRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addTagInput: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D6DEED',
+    backgroundColor: '#F8FAFF',
+    paddingHorizontal: 12,
+    color: TEXT_DARK,
+  },
+  addTagBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addHighlightText: {
+    fontSize: 12,
+    color: PRIMARY,
+    fontWeight: '700',
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
   bulletDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: PRIMARY,
-    flexShrink: 0,
   },
-  bulletInput: {
+  highlightInput: {
     flex: 1,
-    backgroundColor: CARD_BG,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: TEXT_MAIN,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D6DEED',
+    backgroundColor: '#F8FAFF',
+    paddingHorizontal: 10,
+    color: TEXT_DARK,
   },
-  bulletRemove: {
-    padding: 2,
-  },
-  addBulletBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingVertical: 10,
-  },
-  addBulletText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: PRIMARY,
-  },
-
-  // ── Preview ──
   previewHint: {
     fontSize: 12,
     color: TEXT_MUTED,
-    textAlign: "center",
-    marginBottom: 16,
-    fontStyle: "italic",
+    textAlign: 'center',
+    marginBottom: 4,
   },
   previewCard: {
-    backgroundColor: CARD_BG,
+    backgroundColor: CARD,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: BORDER,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 3,
-    marginBottom: 16,
+    borderColor: '#DCE6F1',
+    padding: 14,
   },
-  previewCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  previewAuthorRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
     gap: 8,
   },
   previewAvatar: {
     width: 34,
     height: 34,
     borderRadius: 17,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  previewAuthorName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: TEXT_MAIN,
-  },
-  previewMeta: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-    marginTop: 1,
-  },
-  previewCardBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-  },
+  previewAuthor: { fontSize: 13, color: TEXT_DARK, fontWeight: '700' },
+  previewMeta: { fontSize: 10, color: TEXT_MUTED },
   previewTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: TEXT_MAIN,
-    marginBottom: 5,
+    fontSize: 17,
+    color: TEXT_DARK,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   previewDescription: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#475569",
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 21,
+    fontWeight: '500',
   },
-  previewTagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  previewTagsWrap: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
-    marginTop: 9,
   },
   previewTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-    gap: 3,
+    borderRadius: 999,
+    backgroundColor: '#E8F0F7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   previewTagText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: PRIMARY,
-  },
-  previewBullets: {
-    marginTop: 9,
-    gap: 5,
-  },
-  previewBulletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  previewBulletDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: PRIMARY,
-  },
-  previewBulletText: {
+    color: '#1B4B7E',
     fontSize: 12,
-    color: TEXT_MUTED,
+    fontWeight: '800',
   },
-  previewCardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 14,
-  },
-  previewVoteGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    borderRadius: 99,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+  previewHighlightsWrap: {
+    marginTop: 10,
     gap: 6,
   },
-  previewVoteCount: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: TEXT_MUTED,
-    minWidth: 16,
-    textAlign: "center",
-  },
-  previewVoteDivider: {
-    width: 1,
-    height: 14,
-    backgroundColor: "#cbd5e1",
-  },
-  previewFooterDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: BORDER,
-  },
-  previewFooterAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  previewFooterLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: TEXT_MUTED,
-  },
-
-  // ── Preview CTAs ──
-  editReminderBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  previewHighlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 7,
-    paddingVertical: 12,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
+  },
+  previewDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: PRIMARY,
+  },
+  previewHighlightText: {
+    flex: 1,
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  previewFooter: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F7',
+    flexDirection: 'row',
+    gap: 16,
+  },
+  previewFooterItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  previewFooterText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '700' },
+  backEditBtn: {
+    marginTop: 6,
+    borderRadius: 13,
+    borderWidth: 1,
     borderColor: PRIMARY,
-    backgroundColor: CARD_BG,
+    backgroundColor: '#FFFFFF',
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  editReminderText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: PRIMARY,
+  backEditText: { color: PRIMARY, fontSize: 13, fontWeight: '700' },
+  publishBtn: {
+    marginTop: 10,
+    borderRadius: 14,
+    backgroundColor: PRIMARY,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  bigPublishBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: ACCENT,
-    borderWidth: 1.5,
-    borderColor: ACCENT_BORDER,
-    borderRadius: 16,
-    paddingVertical: 16,
-    shadowColor: "#C8C87A",
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  bigPublishBtnText: {
-    color: ACCENT_TEXT,
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
+  publishBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });

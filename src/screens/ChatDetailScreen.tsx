@@ -41,6 +41,7 @@ interface Message {
   time: string;
   isMe: boolean;
   status: 'sending' | 'sent' | 'failed';
+  isRead?: boolean;
 }
 
 const STATUS_H = StatusBar.currentHeight || 0;
@@ -85,9 +86,23 @@ const ChatDetailScreen = () => {
       time: formatTime(row.created_at),
       isMe: row.sender_id === userId,
       status: 'sent',
+      isRead: Boolean(row.read_status),
     };
     setMessages((prev) => (prev.some((item) => item.id === mapped.id) ? prev : [...prev, mapped]));
   }, []);
+
+  const markConversationAsRead = useCallback(
+    async (viewerId: string) => {
+      if (!viewerId || !chatId) return;
+      await supabase
+        .from('messages')
+        .update({ read_status: true })
+        .eq('receiver_id', viewerId)
+        .eq('sender_id', chatId)
+        .eq('read_status', false);
+    },
+    [chatId],
+  );
 
   const loadConversation = useCallback(
     async (userIdOverride?: string) => {
@@ -101,13 +116,30 @@ const ChatDetailScreen = () => {
       if (!userId || !chatId) return;
       setCurrentUserId(userId);
 
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+
+      const primary = await supabase
         .from('messages')
-        .select('id, sender_id, receiver_id, message_text, created_at')
+        .select('id, sender_id, receiver_id, message_text, created_at, read_status')
         .or(
           `and(sender_id.eq.${userId},receiver_id.eq.${chatId}),and(sender_id.eq.${chatId},receiver_id.eq.${userId})`,
         )
         .order('created_at', { ascending: true });
+      data = primary.data as any[] | null;
+      error = primary.error;
+
+      if (error?.message?.toLowerCase().includes('read_status')) {
+        const fallback = await supabase
+          .from('messages')
+          .select('id, sender_id, receiver_id, message_text, created_at')
+          .or(
+            `and(sender_id.eq.${userId},receiver_id.eq.${chatId}),and(sender_id.eq.${chatId},receiver_id.eq.${userId})`,
+          )
+          .order('created_at', { ascending: true });
+        data = fallback.data as any[] | null;
+        error = fallback.error;
+      }
 
       if (error) {
         return;
@@ -119,10 +151,12 @@ const ChatDetailScreen = () => {
         time: formatTime(row.created_at),
         isMe: row.sender_id === userId,
         status: 'sent',
+        isRead: Boolean(row.read_status),
       }));
       setMessages(mapped);
+      await markConversationAsRead(userId);
     },
-    [chatId],
+    [chatId, markConversationAsRead],
   );
 
   useEffect(() => {
@@ -158,6 +192,9 @@ const ChatDetailScreen = () => {
               (row.sender_id === chatId && row.receiver_id === user.id);
             if (!matchesConversation) return;
             appendMessage(row, user.id);
+            if (row.sender_id === chatId && row.receiver_id === user.id) {
+              markConversationAsRead(user.id);
+            }
           },
         )
         .subscribe();
@@ -171,7 +208,7 @@ const ChatDetailScreen = () => {
         supabase.removeChannel(realtimeChannel);
       }
     };
-  }, [appendMessage, chatId, loadConversation]);
+  }, [appendMessage, chatId, loadConversation, markConversationAsRead]);
 
   const sendMessage = useCallback(async (overrideText?: string, existingLocalId?: string) => {
     const content = (overrideText ?? inputText).trim();
@@ -202,15 +239,30 @@ const ChatDetailScreen = () => {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('messages')
       .insert({
         sender_id: currentUserId,
         receiver_id: chatId,
         message_text: content,
+        read_status: false,
       })
-      .select('id, sender_id, receiver_id, message_text, created_at')
+      .select('id, sender_id, receiver_id, message_text, created_at, read_status')
       .single();
+
+    if (error?.message?.toLowerCase().includes('read_status')) {
+      const fallback = await supabase
+        .from('messages')
+        .insert({
+          sender_id: currentUserId,
+          receiver_id: chatId,
+          message_text: content,
+        })
+        .select('id, sender_id, receiver_id, message_text, created_at')
+        .single();
+      data = fallback.data as any;
+      error = fallback.error;
+    }
 
     if (error || !data) {
       setMessages((prev) =>
@@ -241,11 +293,12 @@ const ChatDetailScreen = () => {
               time: formatTime(data.created_at),
               isMe: true,
               status: 'sent',
+              isRead: Boolean(data.read_status),
             }
           : item,
       ),
     );
-  }, [appendMessage, chatId, currentUserId, inputText]);
+  }, [chatId, currentUserId, inputText]);
 
   const retryMessage = useCallback(
     (message: Message) => {
@@ -286,7 +339,12 @@ const ChatDetailScreen = () => {
               <ActivityIndicator size="small" color="rgba(255,255,255,0.75)" style={{ marginLeft: 4 }} />
             ) : null}
             {item.isMe && item.status === 'sent' ? (
-              <Ionicons name="checkmark-done" size={14} color="rgba(255,255,255,0.65)" style={{ marginLeft: 4 }} />
+              <Ionicons
+                name={item.isRead ? 'checkmark-done' : 'checkmark'}
+                size={14}
+                color="rgba(255,255,255,0.65)"
+                style={{ marginLeft: 4 }}
+              />
             ) : null}
             {item.isMe && item.status === 'failed' ? (
               <TouchableOpacity onPress={() => retryMessage(item)} activeOpacity={0.8}>
