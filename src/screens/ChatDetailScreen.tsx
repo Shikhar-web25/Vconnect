@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -39,6 +40,7 @@ interface Message {
   text: string;
   time: string;
   isMe: boolean;
+  status: 'sending' | 'sent' | 'failed';
 }
 
 const STATUS_H = StatusBar.currentHeight || 0;
@@ -77,6 +79,7 @@ const ChatDetailScreen = () => {
       text: row.message_text ?? '',
       time: formatTime(row.created_at),
       isMe: row.sender_id === userId,
+      status: 'sent',
     };
     setMessages((prev) => (prev.some((item) => item.id === mapped.id) ? prev : [...prev, mapped]));
   }, []);
@@ -110,6 +113,7 @@ const ChatDetailScreen = () => {
         text: row.message_text ?? '',
         time: formatTime(row.created_at),
         isMe: row.sender_id === userId,
+        status: 'sent',
       }));
       setMessages(mapped);
     },
@@ -164,9 +168,34 @@ const ChatDetailScreen = () => {
     };
   }, [appendMessage, chatId, loadConversation]);
 
-  const sendMessage = useCallback(async () => {
-    const content = inputText.trim();
+  const sendMessage = useCallback(async (overrideText?: string, existingLocalId?: string) => {
+    const content = (overrideText ?? inputText).trim();
     if (!content || !currentUserId || !chatId) return;
+    const localId = existingLocalId ?? `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const localTime = formatTime(new Date().toISOString());
+
+    if (existingLocalId) {
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === existingLocalId
+            ? { ...item, status: 'sending', time: localTime }
+            : item,
+        ),
+      );
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: localId,
+          text: content,
+          time: localTime,
+          isMe: true,
+          status: 'sending',
+        },
+      ]);
+      setInputText('');
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }
 
     const { data, error } = await supabase
       .from('messages')
@@ -178,7 +207,14 @@ const ChatDetailScreen = () => {
       .select('id, sender_id, receiver_id, message_text, created_at')
       .single();
 
-    if (error || !data) return;
+    if (error || !data) {
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === localId ? { ...item, status: 'failed' } : item,
+        ),
+      );
+      return;
+    }
 
     const [user1, user2] = currentUserId < chatId ? [currentUserId, chatId] : [chatId, currentUserId];
     await supabase.from('conversations').upsert(
@@ -191,10 +227,28 @@ const ChatDetailScreen = () => {
       { onConflict: 'user1,user2' },
     );
 
-    appendMessage(data, currentUserId);
-    setInputText('');
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.id === localId
+          ? {
+              id: data.id,
+              text: data.message_text ?? content,
+              time: formatTime(data.created_at),
+              isMe: true,
+              status: 'sent',
+            }
+          : item,
+      ),
+    );
   }, [appendMessage, chatId, currentUserId, inputText]);
+
+  const retryMessage = useCallback(
+    (message: Message) => {
+      if (message.status !== 'failed') return;
+      sendMessage(message.text, message.id);
+    },
+    [sendMessage],
+  );
 
   const goToProfile = useCallback(() => {
     setMenuVisible(false);
@@ -223,19 +277,22 @@ const ChatDetailScreen = () => {
             <Text style={[styles.timeText, item.isMe ? styles.timeSent : styles.timeReceived]}>
               {item.time}
             </Text>
-            {item.isMe ? (
-              <Ionicons
-                name="checkmark-done"
-                size={14}
-                color="rgba(255,255,255,0.65)"
-                style={{ marginLeft: 4 }}
-              />
+            {item.isMe && item.status === 'sending' ? (
+              <ActivityIndicator size="small" color="rgba(255,255,255,0.75)" style={{ marginLeft: 4 }} />
+            ) : null}
+            {item.isMe && item.status === 'sent' ? (
+              <Ionicons name="checkmark-done" size={14} color="rgba(255,255,255,0.65)" style={{ marginLeft: 4 }} />
+            ) : null}
+            {item.isMe && item.status === 'failed' ? (
+              <TouchableOpacity onPress={() => retryMessage(item)} activeOpacity={0.8}>
+                <Ionicons name="alert-circle" size={14} color="#FCA5A5" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
             ) : null}
           </View>
         </View>
       </View>
     ),
-    [],
+    [retryMessage],
   );
 
   return (
@@ -296,7 +353,7 @@ const ChatDetailScreen = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sendBtn, inputText.trim() ? styles.sendActive : null]}
-                onPress={sendMessage}
+                onPress={() => sendMessage()}
                 activeOpacity={0.7}
               >
                 <Ionicons

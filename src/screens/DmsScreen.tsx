@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   StyleSheet,
@@ -14,7 +15,6 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Dimensions,
-  ActivityIndicator,
   ImageSourcePropType,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -44,13 +44,16 @@ type ChatItemData = {
   time: string;
   unreadCount: number;
   pinned: boolean;
-  avatar: string | number;
+  avatar: ImageSourcePropType;
   batch?: string;
   about?: string;
 };
 
-const toImageSource = (value: string | number): ImageSourcePropType =>
-  typeof value === 'string' ? { uri: value } : value;
+const toImageSource = (value: any): ImageSourcePropType => {
+  if (typeof value === 'string' && value.trim()) return { uri: value };
+  if (typeof value === 'number') return value;
+  return getMaleAvatar(0);
+};
 
 const ChatItem = React.memo(
   ({
@@ -119,8 +122,9 @@ const DmsScreen = () => {
   const [previewUser, setPreviewUser] = useState<ChatItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserName, setCurrentUserName] = useState('Student');
-  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | number>(getMaleAvatar(0));
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<ImageSourcePropType>(getMaleAvatar(0));
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const skeletonPulse = useRef(new Animated.Value(0.42)).current;
 
   const formatTime = (isoDate?: string | null) => {
     if (!isoDate) return '';
@@ -154,7 +158,7 @@ const DmsScreen = () => {
         .single();
 
       setCurrentUserName(profile?.full_name ?? profile?.username ?? 'Student');
-      setCurrentUserAvatar(profile?.avatar_url ?? getMaleAvatar(0));
+      setCurrentUserAvatar(toImageSource(profile?.avatar_url ?? getMaleAvatar(0)));
 
       const { data: conversations, error } = await supabase
         .from('conversations')
@@ -193,7 +197,7 @@ const DmsScreen = () => {
           name: profileData?.full_name ?? profileData?.username ?? 'Student',
           message: convo?.last_message ?? 'Start a conversation',
           time: formatTime(convo?.last_message_at),
-          avatar: profileData?.avatar_url ?? fallbackAvatar,
+          avatar: toImageSource(profileData?.avatar_url ?? fallbackAvatar),
           unreadCount: 0,
           pinned: false,
           batch: profileData?.year_of_study ? `${profileData.year_of_study}` : 'NA',
@@ -211,6 +215,25 @@ const DmsScreen = () => {
     },
     [currentUserId],
   );
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 0.92,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.42,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [skeletonPulse]);
 
   useEffect(() => {
     let mounted = true;
@@ -326,6 +349,21 @@ const DmsScreen = () => {
     [navigation],
   );
 
+  const renderSkeletonRows = () =>
+    Array.from({ length: 6 }, (_, index) => (
+      <Animated.View
+        key={`dm-skeleton-${index}`}
+        style={[styles.skeletonRow, { opacity: skeletonPulse }]}
+      >
+        <View style={styles.skeletonAvatar} />
+        <View style={styles.skeletonBody}>
+          <View style={styles.skeletonName} />
+          <View style={styles.skeletonMessage} />
+        </View>
+        <View style={styles.skeletonTime} />
+      </Animated.View>
+    ));
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} translucent={false} />
@@ -395,8 +433,7 @@ const DmsScreen = () => {
             <View style={styles.emptyWrap}>
               {loading ? (
                 <>
-                  <ActivityIndicator size="small" color={ACCENT} />
-                  <Text style={styles.emptyText}>Loading conversations...</Text>
+                  <View style={styles.skeletonWrap}>{renderSkeletonRows()}</View>
                 </>
               ) : (
                 <>
@@ -566,6 +603,49 @@ const styles = StyleSheet.create({
   unreadBadgeText: { fontSize: 10, fontWeight: '800', color: '#FFF' },
   emptyWrap: { alignItems: 'center', paddingTop: 80 },
   emptyText: { color: TEXT_MUTED, fontSize: 15, fontWeight: '600', marginTop: 12 },
+  skeletonWrap: {
+    width: '100%',
+    gap: 10,
+    paddingHorizontal: 4,
+  },
+  skeletonRow: {
+    width: '100%',
+    borderRadius: 16,
+    backgroundColor: '#DDE3F0',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#C8D1E3',
+  },
+  skeletonBody: {
+    marginLeft: 12,
+    flex: 1,
+    gap: 8,
+  },
+  skeletonName: {
+    width: '46%',
+    height: 10,
+    borderRadius: 8,
+    backgroundColor: '#C8D1E3',
+  },
+  skeletonMessage: {
+    width: '70%',
+    height: 9,
+    borderRadius: 8,
+    backgroundColor: '#C8D1E3',
+  },
+  skeletonTime: {
+    width: 36,
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: '#C8D1E3',
+  },
   previewOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 12, 40, 0.85)',

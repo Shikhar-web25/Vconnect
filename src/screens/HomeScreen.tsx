@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -10,6 +10,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    Animated,
 } from 'react-native';
 import HomeHeader from '../components/home/HomeHeader';
 import QuestionCard from '../components/feed/QuestionCard';
@@ -49,11 +50,31 @@ const HomeScreen = () => {
     const [newPostText, setNewPostText] = useState('');
     const [posting, setPosting] = useState(false);
     const [currentUser, setCurrentUser] = useState<{ id: string; full_name?: string; username?: string; avatar_url?: string } | null>(null);
+    const skeletonPulse = useRef(new Animated.Value(0.42)).current;
 
     useEffect(() => {
         loadCurrentUser();
         loadPosts();
     }, []);
+
+    useEffect(() => {
+        const animation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(skeletonPulse, {
+                    toValue: 0.92,
+                    duration: 900,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(skeletonPulse, {
+                    toValue: 0.42,
+                    duration: 900,
+                    useNativeDriver: true,
+                }),
+            ]),
+        );
+        animation.start();
+        return () => animation.stop();
+    }, [skeletonPulse]);
 
     useEffect(() => {
         if (selectedQuestionId) {
@@ -243,6 +264,25 @@ const HomeScreen = () => {
         };
     }, [selectedQuestionId, posts, commentsByPostId]);
 
+    const renderSkeletonCards = () =>
+        Array.from({ length: 3 }, (_, index) => (
+            <Animated.View
+                key={`home-skeleton-${index}`}
+                style={[styles.skeletonCard, { opacity: skeletonPulse }]}
+            >
+                <View style={styles.skeletonHeaderRow}>
+                    <View style={styles.skeletonAvatar} />
+                    <View style={styles.skeletonHeaderTextWrap}>
+                        <View style={styles.skeletonNameLine} />
+                        <View style={styles.skeletonMetaLine} />
+                    </View>
+                </View>
+                <View style={styles.skeletonTitleLine} />
+                <View style={styles.skeletonBodyLineLg} />
+                <View style={styles.skeletonBodyLineSm} />
+            </Animated.View>
+        ));
+
     return (
         <View style={styles.container}>
             {/* 
@@ -261,8 +301,7 @@ const HomeScreen = () => {
                     <View style={styles.feedContainer}>
                         {loading && (
                             <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="small" color="#4A6D8C" />
-                                <Text style={styles.loadingText}>Loading posts...</Text>
+                                {renderSkeletonCards()}
                             </View>
                         )}
 
@@ -359,14 +398,68 @@ const styles = StyleSheet.create({
         marginTop: -10, // Slight overlap closer to header
     },
     loadingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        gap: 12,
         paddingVertical: 16,
     },
     loadingText: {
         marginLeft: 10,
         color: '#64748B',
         fontSize: 14,
+    },
+    skeletonCard: {
+        borderRadius: 20,
+        backgroundColor: '#E8EEF5',
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#DDE6F0',
+    },
+    skeletonHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    skeletonAvatar: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: '#CED9E6',
+    },
+    skeletonHeaderTextWrap: {
+        marginLeft: 10,
+        gap: 6,
+        flex: 1,
+    },
+    skeletonNameLine: {
+        width: '45%',
+        height: 10,
+        borderRadius: 8,
+        backgroundColor: '#CED9E6',
+    },
+    skeletonMetaLine: {
+        width: '30%',
+        height: 8,
+        borderRadius: 8,
+        backgroundColor: '#CED9E6',
+    },
+    skeletonTitleLine: {
+        marginTop: 14,
+        width: '84%',
+        height: 12,
+        borderRadius: 8,
+        backgroundColor: '#CED9E6',
+    },
+    skeletonBodyLineLg: {
+        marginTop: 10,
+        width: '94%',
+        height: 10,
+        borderRadius: 8,
+        backgroundColor: '#CED9E6',
+    },
+    skeletonBodyLineSm: {
+        marginTop: 8,
+        width: '68%',
+        height: 10,
+        borderRadius: 8,
+        backgroundColor: '#CED9E6',
     },
     errorText: {
         color: '#DC2626',

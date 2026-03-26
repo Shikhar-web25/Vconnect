@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Linking,
   Modal,
   NativeModules,
   PanResponder,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -173,10 +174,30 @@ export default function ProfileScreen() {
   const [draftResumeFormat, setDraftResumeFormat] = useState('pdf');
   const [draftResumeResourceType, setDraftResumeResourceType] = useState<CloudinaryResourceType>('raw');
   const [draftResumeDeliveryType, setDraftResumeDeliveryType] = useState<CloudinaryDeliveryType>('private');
+  const skeletonPulse = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     loadProfile(true);
   }, []);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 0.9,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.4,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [skeletonPulse]);
 
   const hasColumn = (column: string) => profileColumns.includes(column);
 
@@ -571,9 +592,10 @@ export default function ProfileScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: async () => {
-          const { error } = await supabase.auth.signOut();
+          const { error } = await supabase.auth.signOut({ scope: 'local' });
           if (error) {
             Alert.alert('Logout failed', error.message);
+            return;
           }
         },
       },
@@ -623,7 +645,9 @@ export default function ProfileScreen() {
         <View style={styles.loadingCard}>
           <MaterialCommunityIcons name="account-circle-outline" size={36} color="#8CCBFF" />
           <Text style={styles.loadingTitle}>Loading profile</Text>
-          <Text style={styles.loadingBody}>Fetching your latest profile, activity, and saved backend data.</Text>
+          <Animated.View style={[styles.loadingSkeletonLineLg, { opacity: skeletonPulse }]} />
+          <Animated.View style={[styles.loadingSkeletonLineMd, { opacity: skeletonPulse }]} />
+          <Animated.View style={[styles.loadingSkeletonLineSm, { opacity: skeletonPulse }]} />
         </View>
       </SafeAreaView>
     );
@@ -998,7 +1022,9 @@ const styles = StyleSheet.create({
   loadingScreen: { flex: 1, backgroundColor: '#173864', justifyContent: 'center', alignItems: 'center', padding: 24 },
   loadingCard: { width: '100%', maxWidth: 320, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.12)', padding: 24, alignItems: 'center' },
   loadingTitle: { marginTop: 12, color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
-  loadingBody: { marginTop: 8, color: 'rgba(255,255,255,0.84)', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  loadingSkeletonLineLg: { marginTop: 14, width: '84%', height: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.28)' },
+  loadingSkeletonLineMd: { marginTop: 10, width: '72%', height: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.24)' },
+  loadingSkeletonLineSm: { marginTop: 10, width: '58%', height: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)' },
   heroSection: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 110, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroEyebrow: { color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '700', letterSpacing: 1.8, textTransform: 'uppercase' },
