@@ -56,7 +56,12 @@ const toImageSource = (value: any): ImageSourcePropType => {
 const ChatDetailScreen = () => {
   const navigation = useNavigation<Nav>();
   const route = useRoute<ChatDetailScreenRouteProp>();
-  const { chatId, name, avatar } = route.params || { chatId: '', name: 'User', avatar: null };
+  const { chatId, name, avatar, userId } = route.params || {
+    chatId: '',
+    name: 'User',
+    avatar: null,
+    userId: undefined,
+  };
   const displayAvatar = toImageSource(avatar);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -253,13 +258,14 @@ const ChatDetailScreen = () => {
   const goToProfile = useCallback(() => {
     setMenuVisible(false);
     navigation.navigate('UserProfile', {
+      userId: userId ?? chatId,
       name,
       avatar: displayAvatar,
       about: 'Hey there! I am using Vconnect',
       bio: 'Living the college life',
       contributions: Math.floor(Math.random() * 120) + 20,
     });
-  }, [displayAvatar, name, navigation]);
+  }, [chatId, displayAvatar, name, navigation, userId]);
 
   const onAttachment = useCallback(() => {
     setAttachVisible(false);

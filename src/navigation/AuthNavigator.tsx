@@ -16,9 +16,17 @@ export type RootStackParamList = {
   Signup: undefined;
   ForgotPassword: undefined;
   Main: undefined;
-  ChatDetail: { chatId: string; name: string; avatar: any };
+  ChatDetail: { chatId: string; name: string; avatar: any; userId?: string };
   AdminDashboard: undefined;
-  UserProfile: { name: string; avatar: any; batch?: string; about?: string; bio?: string; contributions?: number };
+  UserProfile: {
+    userId?: string;
+    name?: string;
+    avatar?: any;
+    batch?: string;
+    about?: string;
+    bio?: string;
+    contributions?: number;
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

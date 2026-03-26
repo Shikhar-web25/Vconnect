@@ -3,7 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../screens/HomeScreen';
 import DmsScreen from '../screens/DmsScreen';
-import DiscoverScreen from '../screens/DiscoverScreen';
+import DiscoverStack from "./DiscoverStack";
+
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
@@ -35,7 +36,7 @@ const BottomTabNavigator = () => {
         >
             <Tab.Screen name="Home" component={HomeScreen} />
             <Tab.Screen name="DMs" component={DmsScreen} />
-            <Tab.Screen name="Discover" component={DiscoverScreen} />
+            <Tab.Screen name="Discover" component={DiscoverStack}  options={{ headerShown: false }} />
             <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
     );

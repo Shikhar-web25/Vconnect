@@ -17,6 +17,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { getMaleAvatar } from '../utils/avatar';
+import { supabase } from '../../supabaseClient';
 
 const DEEP = '#1E1B4B';
 const ACCENT = '#5B6AF0';
@@ -26,6 +27,22 @@ const TEXT_MUTED = '#8892A6';
 const { width: SW } = Dimensions.get('window');
 
 type UserProfileScreenRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
+
+type PublicProfile = {
+    id: string;
+    full_name?: string | null;
+    username?: string | null;
+    bio?: string | null;
+    avatar_url?: string | null;
+    year_of_study?: number | null;
+};
+
+const toImageSource = (value: any) => {
+    if (typeof value === 'string' && value.trim()) return { uri: value };
+    if (typeof value === 'number') return value;
+    if (value && typeof value === 'object') return value;
+    return getMaleAvatar(0);
+};
 
 // Animated counter
 const Counter = ({ target, label, icon, iconColor }: { target: number; label: string; icon: string; iconColor: string }) => {
@@ -50,26 +67,92 @@ const Counter = ({ target, label, icon, iconColor }: { target: number; label: st
 const UserProfileScreen = () => {
     const navigation = useNavigation();
     const route = useRoute<UserProfileScreenRouteProp>();
-    const { name, avatar, about, bio, contributions } = route.params;
-    const displayAvatar = avatar || getMaleAvatar(0);
+    const params = route.params ?? {};
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(30)).current;
-    const [randomBatch, setRandomBatch] = useState('');
     const [comingSoon, setComingSoon] = useState(false);
+    const [profile, setProfile] = useState<PublicProfile | null>(null);
+    const [viewerId, setViewerId] = useState<string | null>(null);
+    const [stats, setStats] = useState({
+        contributions: 0,
+        posts: 0,
+        connections: 0,
+    });
 
     useEffect(() => {
-        const years = ['2023', '2024', '2025', '2026'];
-        setRandomBatch(years[Math.floor(Math.random() * years.length)]);
         Animated.parallel([
             Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
             Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 10, useNativeDriver: true }),
         ]).start();
     }, []);
 
-    const displayAbout = about || 'Hey there! I am using Vconnect';
-    const displayBio = bio || 'Living the college life';
-    const displayContributions = contributions || Math.floor(Math.random() * 100) + 20;
+    useEffect(() => {
+        let mounted = true;
+
+        const loadUserProfile = async () => {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+            if (!mounted) return;
+            setViewerId(user?.id ?? null);
+
+            const targetUserId = params.userId ?? user?.id ?? null;
+            if (!targetUserId) return;
+
+            const [profileResult, postsResult, commentsResult, sentMessagesResult, receivedMessagesResult] =
+                await Promise.all([
+                    supabase
+                        .from('profiles')
+                        .select('id, full_name, username, bio, avatar_url, year_of_study')
+                        .eq('id', targetUserId)
+                        .single(),
+                    supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+                    supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+                    supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', targetUserId),
+                    supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', targetUserId),
+                ]);
+
+            if (!mounted) return;
+            if (!profileResult.error && profileResult.data) {
+                setProfile(profileResult.data as PublicProfile);
+            }
+
+            const postsCount = postsResult.count ?? 0;
+            const commentsCount = commentsResult.count ?? 0;
+            const connectionsCount = (sentMessagesResult.count ?? 0) + (receivedMessagesResult.count ?? 0);
+
+            setStats({
+                contributions: postsCount + commentsCount,
+                posts: postsCount,
+                connections: connectionsCount,
+            });
+        };
+
+        loadUserProfile();
+
+        return () => {
+            mounted = false;
+        };
+    }, [params.userId]);
+
+    const displayName =
+        profile?.full_name?.trim() ||
+        profile?.username?.trim() ||
+        params.name ||
+        'Vconnect User';
+    const displayAvatar = toImageSource(profile?.avatar_url ?? params.avatar);
+    const displayAbout = profile?.bio?.trim() || params.about || 'Hey there! I am using Vconnect';
+    const displayBio = profile?.bio?.trim() || params.bio || 'Living the college life';
+    const displayBatch =
+        profile?.year_of_study != null
+            ? String(profile.year_of_study)
+            : params.batch || 'NA';
+    const displayContributions = stats.contributions || params.contributions || 0;
+    const postsCount = stats.posts;
+    const connectionsCount = stats.connections;
+    const targetUserId = params.userId ?? null;
+    const canMessage = !!targetUserId && targetUserId !== viewerId;
 
     return (
         <View style={styles.root}>
@@ -101,17 +184,30 @@ const UserProfileScreen = () => {
 
                     {/* Profile Card */}
                     <View style={styles.profileCard}>
-                        <Text style={styles.nameText}>{name}</Text>
+                        <Text style={styles.nameText}>{displayName}</Text>
                         <Text style={styles.bioText}>{displayBio}</Text>
                         <View style={styles.tagRow}>
                             <View style={styles.tag}>
                                 <Ionicons name="school" size={13} color={DEEP} style={{ marginRight: 4 }} />
-                                <Text style={styles.tagText}>Batch {randomBatch}</Text>
+                                <Text style={styles.tagText}>Batch {displayBatch}</Text>
                             </View>
                         </View>
 
                         <View style={styles.actionRow}>
-                            <TouchableOpacity style={styles.primaryBtn} onPress={() => (navigation as any).navigate('ChatDetail', { chatId: name, name, avatar: displayAvatar })} activeOpacity={0.8}>
+                            <TouchableOpacity
+                                style={[styles.primaryBtn, !canMessage && styles.disabledButton]}
+                                onPress={() =>
+                                    canMessage &&
+                                    (navigation as any).navigate('ChatDetail', {
+                                        chatId: targetUserId as string,
+                                        userId: targetUserId as string,
+                                        name: displayName,
+                                        avatar: displayAvatar,
+                                    })
+                                }
+                                activeOpacity={0.8}
+                                disabled={!canMessage}
+                            >
                                 <Ionicons name="chatbubble" size={16} color="#FFF" style={{ marginRight: 6 }} />
                                 <Text style={styles.primaryBtnText}>Message</Text>
                             </TouchableOpacity>
@@ -134,9 +230,9 @@ const UserProfileScreen = () => {
                     <View style={styles.statsCard}>
                         <Counter target={displayContributions} label="Contributions" icon="git-branch-outline" iconColor="#8B5CF6" />
                         <View style={styles.statDiv} />
-                        <Counter target={Math.floor(Math.random() * 30) + 5} label="Posts" icon="document-text-outline" iconColor="#3B82F6" />
+                        <Counter target={postsCount} label="Posts" icon="document-text-outline" iconColor="#3B82F6" />
                         <View style={styles.statDiv} />
-                        <Counter target={Math.floor(Math.random() * 150) + 30} label="Connections" icon="people-outline" iconColor="#22C55E" />
+                        <Counter target={connectionsCount} label="Connections" icon="people-outline" iconColor="#22C55E" />
                     </View>
 
                     {/* About */}
@@ -215,8 +311,6 @@ const UserProfileScreen = () => {
 
 const STATUS_H = StatusBar.currentHeight || 0;
 const HEADER_PT = Platform.OS === 'android' ? STATUS_H + 12 : 50;
-const V_HEIGHT = 220;
-const V_POINT = 50;
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: BG },
@@ -282,6 +376,7 @@ const styles = StyleSheet.create({
     viewProfileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingVertical: 12, borderRadius: 14, borderWidth: 1.5, borderColor: ACCENT, marginTop: 10 },
     viewProfileText: { color: ACCENT, fontSize: 14, fontWeight: '700' },
     primaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: ACCENT, paddingVertical: 12, borderRadius: 14, elevation: 3, shadowColor: ACCENT, shadowOpacity: 0.3, shadowRadius: 8 },
+    disabledButton: { opacity: 0.5 },
     primaryBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
     secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F2FA', paddingVertical: 12, borderRadius: 14 },
     secondaryBtnText: { color: DEEP, fontSize: 15, fontWeight: '700' },

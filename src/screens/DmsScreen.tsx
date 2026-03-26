@@ -25,7 +25,8 @@ import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { getMaleAvatar, getFemaleAvatar } from '../utils/avatar';
 import { supabase } from '../../supabaseClient';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+const isFabricEnabled = Boolean((global as any)?.nativeFabricUIManager);
+if (Platform.OS === 'android' && !isFabricEnabled && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -300,6 +301,7 @@ const DmsScreen = () => {
         chatId: chat.id,
         name: chat.name,
         avatar: chat.avatar,
+        userId: chat.id,
       });
     },
     [navigation],
@@ -319,18 +321,20 @@ const DmsScreen = () => {
 
   const goToProfile = useCallback(() => {
     navigation.navigate('UserProfile', {
+      userId: currentUserId ?? undefined,
       name: currentUserName,
       avatar: currentUserAvatar,
       about: 'Hey there! I am using Vconnect',
       bio: 'Living the college life',
       contributions: 87,
     });
-  }, [currentUserAvatar, currentUserName, navigation]);
+  }, [currentUserAvatar, currentUserId, currentUserName, navigation]);
 
   const viewFullProfile = useCallback(
     (user: ChatItemData) => {
       setPreviewUser(null);
       navigation.navigate('UserProfile', {
+        userId: user.id,
         name: user.name,
         avatar: user.avatar,
         about: user.about,
@@ -344,7 +348,12 @@ const DmsScreen = () => {
   const messageUser = useCallback(
     (user: ChatItemData) => {
       setPreviewUser(null);
-      navigation.navigate('ChatDetail', { chatId: user.id, name: user.name, avatar: user.avatar });
+      navigation.navigate('ChatDetail', {
+        chatId: user.id,
+        name: user.name,
+        avatar: user.avatar,
+        userId: user.id,
+      });
     },
     [navigation],
   );
