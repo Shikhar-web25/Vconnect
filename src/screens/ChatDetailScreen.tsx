@@ -1,235 +1,337 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     View,
+    Text,
     StyleSheet,
     FlatList,
-    KeyboardAvoidingView,
-    Platform,
     TextInput,
     TouchableOpacity,
-    Text,
-    ImageBackground
+    ImageBackground,
+    KeyboardAvoidingView,
+    Platform,
+    Image,
+    StatusBar,
+    Modal,
+    TouchableWithoutFeedback,
+    Keyboard,
+    Dimensions,
 } from 'react-native';
-import { RouteProp, useRoute } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import ChatDetailHeader from '../components/dm/ChatDetailHeader';
-import ChatBubble from '../components/dm/ChatBubble';
-import { RootStackParamList } from '../navigation/AuthNavigator';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import type { RootStackParamList } from '../navigation/AuthNavigator';
+import { getMaleAvatar } from '../utils/avatar';
+
+const DEEP = '#1E1B4B';
+const ACCENT = '#5B6AF0';
+const SENT = '#5B6AF0';
+const TEXT_DARK = '#1A1A2E';
+const TEXT_MUTED = '#8892A6';
+const DOODLE = require('./doodle.png');
 
 type ChatDetailScreenRouteProp = RouteProp<RootStackParamList, 'ChatDetail'>;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-interface Message {
-    id: string;
-    text: string;
-    time: string;
-    isMe: boolean;
-}
+interface Message { id: string; text: string; time: string; isMe: boolean; }
+
+const STATUS_H = StatusBar.currentHeight || 0;
+const HEADER_PT = Platform.OS === 'android' ? STATUS_H + 10 : 50;
+const HEADER_TOTAL = HEADER_PT + 12 + 38;
 
 const ChatDetailScreen = () => {
+    const navigation = useNavigation<Nav>();
     const route = useRoute<ChatDetailScreenRouteProp>();
-    const { chatId, name, avatar } = route.params;
-    const [inputText, setInputText] = useState('');
+    const { name, avatar } = route.params || { name: 'User', avatar: null };
+    const displayAvatar = avatar || getMaleAvatar(0);
 
     const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            text: "I've reviewed your graph theory logic. The implementation of Dijkstra's looks solid, but check the edge cases for negative weights.",
-            time: '19:45',
-            isMe: false,
-        },
-        {
-            id: '2',
-            text: "Thanks! I'll re-check the Bellman-Ford approach for the negative cycles then. Did you see the update on the research notes?",
-            time: '19:48',
-            isMe: true,
-        },
-        {
-            id: '3',
-            text: "Yes, much better clarity now. Let's discuss it in the lab tomorrow.",
-            time: '19:50',
-            isMe: false
-        },
-        {
-            id: '4',
-            text: "Perfect. See you at 10 AM! 🚀",
-            time: '19:51',
-            isMe: true
-        }
+        { id: '1', text: 'Hey! Long time no see', time: '7:42 PM', isMe: false },
+        { id: '2', text: 'I know right! How have you been?', time: '7:43 PM', isMe: true },
+        { id: '3', text: 'Doing great! Just busy with college stuff', time: '7:44 PM', isMe: false },
+        { id: '4', text: "Same here. Let's hang out this weekend!", time: '7:45 PM', isMe: true },
+        { id: '5', text: 'Absolutely! Where should we go?', time: '7:46 PM', isMe: false },
+        { id: '6', text: 'How about that new cafe near campus?', time: '7:48 PM', isMe: true },
     ]);
+    const [inputText, setInputText] = useState('');
+    const [attachVisible, setAttachVisible] = useState(false);
+    const [menuVisible, setMenuVisible] = useState(false);
+    const [comingSoon, setComingSoon] = useState(false);
+    const flatListRef = useRef<FlatList>(null);
 
-    const handleSend = () => {
+    useEffect(() => {
+        const sub = Keyboard.addListener('keyboardDidShow', () =>
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150)
+        );
+        return () => sub.remove();
+    }, []);
+
+    const handleSend = useCallback(() => {
         if (!inputText.trim()) return;
-
-        const newMessage: Message = {
-            id: Date.now().toString(),
-            text: inputText,
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(), text: inputText,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isMe: true
-        };
-
-        setMessages([...messages, newMessage]);
+            isMe: true,
+        }]);
         setInputText('');
-    };
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }, [inputText]);
+
+    const goToProfile = useCallback(() => {
+        setMenuVisible(false);
+        navigation.navigate('UserProfile', {
+            name, avatar: displayAvatar,
+            about: 'Hey there! I am using Vconnect',
+            bio: 'Living the college life',
+            contributions: Math.floor(Math.random() * 120) + 20,
+        });
+    }, [navigation, name, displayAvatar]);
+
+    const onAttachment = useCallback((type: string) => {
+        setAttachVisible(false);
+        setComingSoon(true);
+    }, []);
+
+    const renderMsg = useCallback(({ item }: { item: Message }) => (
+        <View style={[styles.msgRow, item.isMe ? styles.rowR : styles.rowL]}>
+            <View style={[styles.bubble, item.isMe ? styles.bubbleSent : styles.bubbleReceived]}>
+                <Text style={[styles.msgText, item.isMe ? styles.msgTextSent : styles.msgTextReceived]}>{item.text}</Text>
+                <View style={styles.timeRow}>
+                    <Text style={[styles.timeText, item.isMe ? styles.timeSent : styles.timeReceived]}>{item.time}</Text>
+                    {item.isMe ? <Ionicons name="checkmark-done" size={14} color="rgba(255,255,255,0.65)" style={{ marginLeft: 4 }} /> : null}
+                </View>
+            </View>
+        </View>
+    ), []);
 
     return (
-        <View style={styles.container}>
-            <ChatDetailHeader name={name} avatar={avatar} />
+        <View style={styles.root}>
+            <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-            <KeyboardAvoidingView
-                style={styles.keyboardView}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-            >
-                <View style={styles.chatBackground}>
-                    <View style={styles.datePillContainer}>
-                        <View style={styles.datePill}>
-                            <Text style={styles.dateText}>TODAY, 19:45</Text>
-                        </View>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }} activeOpacity={0.7}>
+                    <Ionicons name="chevron-back" size={26} color="#FFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.headerProfile} onPress={goToProfile} activeOpacity={0.7}>
+                    <View style={styles.avatarRing}>
+                        <Image source={displayAvatar} style={styles.headerAv} />
                     </View>
+                    <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ padding: 6 }} onPress={() => setMenuVisible(true)} activeOpacity={0.7}>
+                    <Ionicons name="ellipsis-vertical" size={20} color="#FFF" />
+                </TouchableOpacity>
+            </View>
 
+            {/* KAV wraps doodle + messages + input. Needs rebuild for manifest change. */}
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior="padding"
+                keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_TOTAL : HEADER_TOTAL}
+            >
+                {/* Doodle bg wraps EVERYTHING (messages + input) so no white rectangle */}
+                <ImageBackground
+                    source={DOODLE}
+                    style={styles.chatArea}
+                    imageStyle={styles.doodleImage}
+                    resizeMode="repeat"
+                >
+                    {/* Blue tint overlay on doodle */}
+                    <View style={styles.doodleTint} />
+
+                    {/* Messages */}
                     <FlatList
-                        style={{ flex: 1 }}
+                        ref={flatListRef}
                         data={messages}
-                        keyExtractor={item => item.id}
-                        renderItem={({ item }) => (
-                            <ChatBubble
-                                text={item.text}
-                                time={item.time}
-                                isMe={item.isMe}
-                                avatar={avatar}
-                            />
-                        )}
+                        keyExtractor={i => i.id}
+                        renderItem={renderMsg}
                         contentContainerStyle={styles.listContent}
-                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                        style={{ flex: 1 }}
                     />
 
-                    {/* Input Area */}
-                    <View style={styles.inputContainer}>
-                        <TouchableOpacity style={styles.attachButton}>
-                            <Ionicons name="add" size={24} color="#64748B" />
-                        </TouchableOpacity>
-
-                        <View style={styles.inputWrapper}>
+                    {/* Floating glass input — INSIDE ImageBackground so doodle is behind it */}
+                    <View style={styles.inputOuter}>
+                        <View style={styles.floatingInput}>
+                            <TouchableOpacity style={styles.plusBtn} onPress={() => setAttachVisible(true)} activeOpacity={0.7}>
+                                <Ionicons name="add-circle" size={26} color={ACCENT} />
+                            </TouchableOpacity>
                             <TextInput
-                                style={styles.input}
-                                placeholder="Type a message..."
-                                placeholderTextColor="#94A3B8"
+                                style={styles.textInput}
+                                placeholder="Message..."
+                                placeholderTextColor="#A0AEC0"
                                 value={inputText}
                                 onChangeText={setInputText}
                                 multiline
                             />
-                            <TouchableOpacity style={styles.emojiButton}>
-                                <Icon name="emoticon-happy-outline" size={24} color="#94A3B8" />
+                            <TouchableOpacity style={styles.emojiBtn} onPress={() => setComingSoon(true)}>
+                                <MaterialCommunityIcons name="emoticon-happy-outline" size={24} color="#A0AEC0" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.sendBtn, inputText.trim() ? styles.sendActive : null]}
+                                onPress={handleSend}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="send" size={16} color={inputText.trim() ? '#FFF' : '#C0C8D8'} style={{ marginLeft: 1 }} />
                             </TouchableOpacity>
                         </View>
-
-                        <TouchableOpacity
-                            style={styles.sendButton}
-                            onPress={handleSend}
-                        >
-                            <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
-                        </TouchableOpacity>
                     </View>
-                </View>
+                </ImageBackground>
             </KeyboardAvoidingView>
+
+            {/* Menu */}
+            <Modal transparent visible={menuVisible} animationType="fade">
+                <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
+                    <View style={styles.overlay}>
+                        <View style={[styles.menu, { top: 90, right: 16 }]}>
+                            <TouchableOpacity style={styles.menuItem} onPress={goToProfile}>
+                                <Ionicons name="person-circle-outline" size={22} color={ACCENT} style={{ marginRight: 12 }} />
+                                <Text style={styles.menuText}>View Profile</Text>
+                            </TouchableOpacity>
+                            <View style={styles.menuDiv} />
+                            <TouchableOpacity style={styles.menuItem} onPress={() => { setMessages([]); setMenuVisible(false); }}>
+                                <Ionicons name="trash-outline" size={22} color="#EF4444" style={{ marginRight: 12 }} />
+                                <Text style={[styles.menuText, { color: '#EF4444' }]}>Clear Chat</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Attachment Sheet */}
+            <Modal transparent visible={attachVisible} animationType="slide">
+                <TouchableWithoutFeedback onPress={() => setAttachVisible(false)}>
+                    <View style={[styles.overlay, { justifyContent: 'flex-end' }]}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.attachSheet}>
+                                <View style={styles.attachHandle} />
+                                <Text style={styles.attachTitle}>Share Content</Text>
+                                <View style={styles.attachRow}>
+                                    <TouchableOpacity style={styles.attachOpt} onPress={() => onAttachment('Document')} activeOpacity={0.7}>
+                                        <View style={[styles.attachIcon, { backgroundColor: ACCENT }]}><Ionicons name="document" size={26} color="#FFF" /></View>
+                                        <Text style={styles.attachText}>Document</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.attachOpt} onPress={() => onAttachment('Gallery')} activeOpacity={0.7}>
+                                        <View style={[styles.attachIcon, { backgroundColor: '#EC4899' }]}><Ionicons name="image" size={26} color="#FFF" /></View>
+                                        <Text style={styles.attachText}>Gallery</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.attachOpt} onPress={() => onAttachment('Camera')} activeOpacity={0.7}>
+                                        <View style={[styles.attachIcon, { backgroundColor: '#F59E0B' }]}><Ionicons name="camera" size={26} color="#FFF" /></View>
+                                        <Text style={styles.attachText}>Camera</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Custom Coming Soon Modal */}
+            <Modal transparent visible={comingSoon} animationType="fade" onRequestClose={() => setComingSoon(false)}>
+                <TouchableWithoutFeedback onPress={() => setComingSoon(false)}>
+                    <View style={styles.csOverlay}>
+                        <View style={styles.csCard}>
+                            <View style={styles.csIconWrap}>
+                                <Ionicons name="rocket-outline" size={32} color={ACCENT} />
+                            </View>
+                            <Text style={styles.csTitle}>Coming Soon</Text>
+                            <Text style={styles.csSub}>This feature will be available in the next update. Stay tuned!</Text>
+                            <TouchableOpacity style={styles.csBtn} onPress={() => setComingSoon(false)} activeOpacity={0.8}>
+                                <Text style={styles.csBtnText}>Got it</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#4A6D8C', // Match header
+    root: { flex: 1, backgroundColor: '#E8EAF6' },
+    header: {
+        paddingTop: HEADER_PT, paddingBottom: 12, paddingHorizontal: 14,
+        backgroundColor: DEEP, flexDirection: 'row', alignItems: 'center',
+        elevation: 8, zIndex: 10,
     },
-    keyboardView: {
-        flex: 1,
+    headerProfile: { flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 4 },
+    avatarRing: {
+        width: 42, height: 42, borderRadius: 21,
+        backgroundColor: 'rgba(91,106,240,0.25)',
+        justifyContent: 'center', alignItems: 'center', marginRight: 12,
+        padding: 2,
     },
-    chatBackground: {
-        flex: 1,
-        backgroundColor: '#F1F5F9', // Clean light gray/slate background
+    headerAv: { width: 36, height: 36, borderRadius: 18 },
+    headerName: { fontSize: 17, fontWeight: '700', color: '#FFF' },
+    // Chat area — white bg so gray doodle lines are visible
+    chatArea: { flex: 1, backgroundColor: '#E8EAF6' },
+    doodleImage: { opacity: 0.55 },
+    doodleTint: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(200, 210, 245, 0.30)',
     },
-    datePillContainer: {
-        alignItems: 'center',
-        marginVertical: 16,
-    },
-    datePill: {
-        backgroundColor: 'rgba(71, 85, 105, 0.1)', // Subtle dark pill
+    listContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
+    msgRow: { flexDirection: 'row', marginBottom: 8 },
+    rowL: { justifyContent: 'flex-start' },
+    rowR: { justifyContent: 'flex-end' },
+    bubble: { maxWidth: '80%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+    // Received: off-white/light lavender — contrasts with white doodle bg
+    bubbleReceived: { backgroundColor: '#F0F2FA', borderBottomLeftRadius: 4 },
+    // Sent: accent blue
+    bubbleSent: { backgroundColor: SENT, borderBottomRightRadius: 4 },
+    msgText: { fontSize: 15, lineHeight: 21 },
+    msgTextReceived: { color: '#2D3748' },
+    msgTextSent: { color: '#FFF' },
+    timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 3 },
+    timeText: { fontSize: 10, fontWeight: '500' },
+    timeSent: { color: 'rgba(255,255,255,0.55)' },
+    timeReceived: { color: '#94A3B8' },
+    // Floating input — inside ImageBackground so doodle continues behind
+    inputOuter: {
         paddingHorizontal: 12,
-        paddingVertical: 5,
-        borderRadius: 16,
+        paddingTop: 6,
+        paddingBottom: 10,
     },
-    dateText: {
-        color: '#475569',
-        fontSize: 11,
-        fontWeight: '600',
-        letterSpacing: 0.5,
+    floatingInput: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 28,
+        paddingHorizontal: 6,
+        minHeight: 52,
+        // Glow effect
+        elevation: 10,
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
     },
-    listContent: {
-        paddingHorizontal: 8, // More padding
-        paddingBottom: 20,
-        paddingTop: 8,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-        backgroundColor: '#FFFFFF', // White background for input area
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 8,
-    },
-    attachButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#F1F5F9',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 10,
-    },
-    inputWrapper: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F8FAFC',
-        borderRadius: 24,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        marginRight: 12,
-        minHeight: 46,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    input: {
-        flex: 1,
-        fontSize: 15,
-        color: '#0F172A',
-        padding: 0,
-        fontWeight: '400',
-    },
-    emojiButton: {
-        marginLeft: 8,
-    },
-    sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#4A6D8C', // Brand color
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#4A6D8C',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-    },
+    plusBtn: { paddingHorizontal: 8, paddingVertical: 10 },
+    textInput: { flex: 1, fontSize: 15, color: TEXT_DARK, fontWeight: '500', paddingVertical: Platform.OS === 'android' ? 8 : 10, maxHeight: 100 },
+    emojiBtn: { paddingHorizontal: 6, paddingVertical: 10 },
+    sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF0F8', marginRight: 2 },
+    sendActive: { backgroundColor: ACCENT, elevation: 4 },
+    overlay: { flex: 1, backgroundColor: 'rgba(30,26,46,0.4)' },
+    menu: { position: 'absolute', backgroundColor: '#FFF', borderRadius: 18, width: 185, paddingVertical: 8, elevation: 10 },
+    menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
+    menuText: { fontSize: 15, fontWeight: '600', color: '#334155' },
+    menuDiv: { height: 1, backgroundColor: '#F1F5F9', marginHorizontal: 16 },
+    attachSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 36, elevation: 12 },
+    attachHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
+    attachTitle: { fontSize: 17, fontWeight: '700', color: TEXT_DARK, textAlign: 'center', marginBottom: 20 },
+    attachRow: { flexDirection: 'row', justifyContent: 'space-around' },
+    attachOpt: { alignItems: 'center' },
+    attachIcon: { width: 58, height: 58, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8, elevation: 3 },
+    attachText: { fontSize: 13, color: '#475569', fontWeight: '600' },
+    // Coming Soon modal
+    csOverlay: { flex: 1, backgroundColor: 'rgba(15,12,40,0.75)', justifyContent: 'center', alignItems: 'center' },
+    csCard: { width: Dimensions.get('window').width * 0.72, backgroundColor: '#FFF', borderRadius: 24, padding: 28, alignItems: 'center' },
+    csIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#EEF0FA', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+    csTitle: { fontSize: 20, fontWeight: '800', color: DEEP, marginBottom: 8 },
+    csSub: { fontSize: 14, color: '#8892A6', textAlign: 'center', lineHeight: 20, marginBottom: 20, fontWeight: '500' },
+    csBtn: { backgroundColor: ACCENT, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 14 },
+    csBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });
 
 export default ChatDetailScreen;
