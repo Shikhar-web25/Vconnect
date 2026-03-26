@@ -7,6 +7,7 @@ import SplashScreen from '../screens/Splashscreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
+import NotificationScreen from '../screens/NotificationScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   Main: undefined;
   ChatDetail: { chatId: string; name: string; avatar: any };
   UserProfile: { name: string; avatar: any; batch?: string; about?: string; bio?: string; contributions?: number };
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -50,6 +52,7 @@ const AuthNavigator = () => {
           />
           <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
           <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+          <Stack.Screen name="Notifications" component={NotificationScreen} />
         </>
       )}
     </Stack.Navigator>

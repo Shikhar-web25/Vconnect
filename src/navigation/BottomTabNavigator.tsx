@@ -6,6 +6,8 @@ import DmsScreen from '../screens/DmsScreen';
 import DiscoverScreen from '../screens/DiscoverScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
+const ACCENT = '#5B6AF0';
+
 const Tab = createBottomTabNavigator();
 
 const BottomTabNavigator = () => {
@@ -29,8 +31,8 @@ const BottomTabNavigator = () => {
                     // You can return any component that you like here!
                     return <Ionicons name={iconName ?? ''} size={size} color={color} />;
                 },
-                tabBarActiveTintColor: 'tomato',
-                tabBarInactiveTintColor: 'gray',
+                tabBarActiveTintColor: ACCENT,
+                tabBarInactiveTintColor: '#8892A6',
             })}
         >
             <Tab.Screen name="Home" component={HomeScreen} />

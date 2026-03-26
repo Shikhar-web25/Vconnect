@@ -1,178 +1,232 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import {
+    View,
+    Text,
+    StyleSheet,
+    TextInput,
+    ScrollView,
+    TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import LinearGradient from 'react-native-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/AuthNavigator';
 
-const categories = ['All Posts', 'Computer Science', 'Physics', 'Chemistry', 'Mathematics'];
+const ACCENT = '#5B6AF0';
+const BG = '#E8EAF6';
+const TEXT_DARK = '#1A1A2E';
+const TEXT_MUTED = '#8892A6';
 
-const HomeHeader = () => {
-    const [selectedCategory, setSelectedCategory] = useState('All Posts');
+const categories = ['All', 'Computer Science', 'Physics', 'Chemistry', 'Mathematics'];
+
+interface HomeHeaderProps {
+    selectedCategory: string;
+    onCategoryChange: (category: string) => void;
+    onSearch?: (text: string) => void;
+    postCount?: number;
+}
+
+// Fixed header component (title + search) - stays at top
+export const FixedHeader: React.FC<{ onSearch?: (text: string) => void; postCount?: number }> = ({
+    onSearch,
+    postCount = 12,
+}) => {
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const [searchText, setSearchText] = useState('');
+
+    const handleSearch = (text: string) => {
+        setSearchText(text);
+        onSearch?.(text);
+    };
+
+    const goToNotifications = () => {
+        navigation.navigate('Notifications');
+    };
 
     return (
-        <View style={styles.container}>
-            <LinearGradient colors={['#4A6D8C', '#6B8CAE', '#8EADC5']} style={styles.gradient}>
-                <SafeAreaView edges={['top']} style={styles.safeArea}>
-                    {/* Top Bar */}
-                    <View style={styles.topBar}>
-                        <View style={styles.logoRow}>
-                            <View style={styles.logoIconBg}>
-                                <Icon name="school" size={24} color="#4A6D8C" />
-                            </View>
-                            <Text style={styles.appName}>V Connect</Text>
-                        </View>
-                        <TouchableOpacity style={styles.notificationBtn}>
-                            <Icon name="bell" size={24} color="#fff" />
-                            <View style={styles.notificationBadge} />
-                        </TouchableOpacity>
+        <View style={styles.fixedHeader}>
+            <SafeAreaView edges={['top']} style={styles.safeArea}>
+                {/* Header Card */}
+                <View style={styles.headerCard}>
+                    <View>
+                        <Text style={styles.headerTitle}>V Connect</Text>
+                        <Text style={styles.headerSub}>{postCount} POSTS</Text>
                     </View>
-
-                    {/* Search Bar */}
-                    <View style={styles.searchContainer}>
-                        <Icon name="magnify" size={24} color="#94A3B8" style={styles.searchIcon} />
-                        <TextInput
-                            placeholder="Search questions, topics..."
-                            placeholderTextColor="rgba(255,255,255,0.7)"
-                            style={styles.searchInput}
-                        />
-                    </View>
-
-                    {/* Filter Chips */}
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.filterScroll}
-                        style={styles.filterContainer}
+                    <TouchableOpacity
+                        style={styles.notifBtn}
+                        onPress={goToNotifications}
+                        activeOpacity={0.7}
                     >
-                        {categories.map((cat) => (
-                            <TouchableOpacity
-                                key={cat}
-                                style={[
-                                    styles.filterChip,
-                                    selectedCategory === cat && styles.activeChip
-                                ]}
-                                onPress={() => setSelectedCategory(cat)}
-                            >
-                                <Text style={[
-                                    styles.filterText,
-                                    selectedCategory === cat && styles.activeFilterText
-                                ]}>
-                                    {cat}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </SafeAreaView>
-            </LinearGradient>
-            {/* Curved bottom handled by container styling in parent or main View if needed, 
-                but here we can just use the border radius on the gradient if it ends the list */}
+                        <Ionicons name="notifications" size={22} color={TEXT_DARK} />
+                        <View style={styles.notificationBadge} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Glass Search */}
+                <View style={styles.glassSearch}>
+                    <Ionicons name="search-outline" size={18} color={ACCENT} />
+                    <TextInput
+                        placeholder="Search messages..."
+                        placeholderTextColor="#A0AEC0"
+                        style={styles.searchInput}
+                        value={searchText}
+                        onChangeText={handleSearch}
+                    />
+                    {searchText.length > 0 && (
+                        <TouchableOpacity onPress={() => handleSearch('')}>
+                            <Ionicons name="close-circle" size={18} color={TEXT_MUTED} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </SafeAreaView>
+        </View>
+    );
+};
+
+// Scrollable filter chips - goes at top of FlatList
+export const FilterChips: React.FC<{ selectedCategory: string; onCategoryChange: (cat: string) => void }> = ({
+    selectedCategory,
+    onCategoryChange,
+}) => {
+    return (
+        <View style={styles.filterWrapper}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+                style={styles.filterContainer}
+            >
+                {categories.map((cat) => {
+                    const isActive = selectedCategory === cat || 
+                        (selectedCategory === 'All Posts' && cat === 'All');
+                    return (
+                        <TouchableOpacity
+                            key={cat}
+                            style={[styles.chip, isActive && styles.chipActive]}
+                            onPress={() => onCategoryChange(cat === 'All' ? 'All Posts' : cat)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                                {cat}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
+        </View>
+    );
+};
+
+// Legacy full header (kept for backward compatibility but not used)
+const HomeHeader: React.FC<HomeHeaderProps> = ({
+    selectedCategory,
+    onCategoryChange,
+    onSearch,
+    postCount = 12,
+}) => {
+    return (
+        <View>
+            <FixedHeader onSearch={onSearch} postCount={postCount} />
+            <FilterChips selectedCategory={selectedCategory} onCategoryChange={onCategoryChange} />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        marginBottom: 20,
+    fixedHeader: {
+        backgroundColor: BG,
     },
-    gradient: {
-        borderBottomLeftRadius: 36,
-        borderBottomRightRadius: 36,
-        paddingBottom: 24,
-    },
-    safeArea: {
-        paddingHorizontal: 20,
-    },
-    topBar: {
+    safeArea: {},
+    headerCard: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 10,
-        marginBottom: 24,
+        paddingHorizontal: 20,
+        paddingTop: 18,
+        paddingBottom: 14,
     },
-    logoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: TEXT_DARK,
+        letterSpacing: -0.5,
     },
-    logoIconBg: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+    headerSub: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: TEXT_MUTED,
+        marginTop: 3,
+        letterSpacing: 1.2,
+    },
+    notifBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(91,106,240,0.15)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
-    },
-    appName: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    notificationBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        position: 'relative',
     },
     notificationBadge: {
         position: 'absolute',
-        top: 10,
+        top: 12,
         right: 12,
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#F87171',
+        backgroundColor: ACCENT,
         borderWidth: 1.5,
-        borderColor: '#6B8CAE',
+        borderColor: BG,
     },
-    searchContainer: {
+    glassSearch: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        borderRadius: 16,
+        backgroundColor: '#F0F2FA',
+        borderRadius: 18,
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    searchIcon: {
-        marginRight: 12,
-        color: '#E2E8F0',
+        height: 46,
+        marginHorizontal: 20,
+        marginBottom: 12,
     },
     searchInput: {
         flex: 1,
-        fontSize: 16,
-        color: '#fff',
-        padding: 0,
+        marginLeft: 10,
+        fontSize: 14,
+        color: TEXT_DARK,
+        fontWeight: '500',
+    },
+    filterWrapper: {
+        marginBottom: 12,
     },
     filterContainer: {
         flexGrow: 0,
     },
     filterScroll: {
-        paddingRight: 20,
-    },
-    filterChip: {
         paddingHorizontal: 20,
-        paddingVertical: 10,
+        gap: 8,
+    },
+    chip: {
+        paddingHorizontal: 18,
+        paddingVertical: 7,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        marginRight: 10,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: '#F0F2FA',
     },
-    activeChip: {
-        backgroundColor: '#334E68', // Darker blue for active state
-        borderColor: '#4A6D8C',
+    chipActive: {
+        backgroundColor: ACCENT,
+        elevation: 3,
+        shadowColor: ACCENT,
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
     },
-    filterText: {
-        fontSize: 14,
+    chipText: {
+        fontSize: 12,
         fontWeight: '600',
-        color: '#E2E8F0',
+        color: TEXT_MUTED,
     },
-    activeFilterText: {
-        color: '#fff',
+    chipTextActive: {
+        color: '#FFF',
+        fontWeight: '700',
     },
 });
 
