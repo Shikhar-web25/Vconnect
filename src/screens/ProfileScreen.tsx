@@ -315,28 +315,43 @@ const styles = StyleSheet.create({
   },
   skillsContainer: {
     marginTop: 20,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    marginHorizontal: -4, // Compensate for margin
   },
   skillTag: {
     backgroundColor: '#eef2ff',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#c7d2fe',
     color: '#4338ca',
     fontSize: 14,
     fontWeight: '600',
-    marginRight: 12,
-    marginBottom: 8,
+    margin: 4,
     textAlign: 'center',
     justifyContent: 'center',
     alignItems: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 1,
+    alignSelf: 'flex-start',
+    minWidth: 80,
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
+  skillText: {
+    color: '#4338ca',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   assetContainer: {
     backgroundColor: 'white',
@@ -759,7 +774,7 @@ const styles = StyleSheet.create({
   editProfileButton: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
+    right: 0,
     backgroundColor: '#1b3a6d',
     borderRadius: 16,
     width: 32,
@@ -809,6 +824,33 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     marginTop: 8,
+  },
+  profileZoomModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileZoomModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  zoomableProfileImage: {
+    width: screenWidth,
+    height: screenWidth,
+    resizeMode: 'contain',
+  },
+  zoomModalCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+    padding: 8,
+    zIndex: 10,
   },
 });
 
@@ -1124,6 +1166,9 @@ export default function ProfileScreen() {
   const [tempSocialLinks, setTempSocialLinks] = useState<string[]>([]);
   const [newSocialLink, setNewSocialLink] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [profileZoomModalVisible, setProfileZoomModalVisible] = useState(false);
+  const zoomScale = useRef(new Animated.Value(1)).current;
+  const panOffset = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(300));
   const [avatarPulse, setAvatarPulse] = useState(false);
@@ -1148,7 +1193,6 @@ export default function ProfileScreen() {
   
   // Move all refs and hooks outside of map functions
   const skillAnimationsRef = useRef<{ [key: number]: { opacity: Animated.Value; scale: Animated.Value } }>({});
-  const barAnimationsRef = useRef<{ [key: number]: Animated.Value }>({});
   const profileGlowRef = useRef(new Animated.Value(0)).current;
   const profileScaleRef = useRef(new Animated.Value(0.95)).current;
   
@@ -1322,6 +1366,32 @@ export default function ProfileScreen() {
         useNativeDriver: true,
       })
     ]).start();
+    
+    // Open zoom modal
+    setProfileZoomModalVisible(true);
+    // Reset zoom and pan when opening
+    zoomScale.setValue(1);
+    panOffset.setValue({ x: 0, y: 0 });
+  };
+
+  // Handle pinch gesture for zooming
+  const handlePinchGestureEvent = Animated.event(
+    [{ nativeEvent: { scale: zoomScale } }],
+    { useNativeDriver: false }
+  );
+
+  // Handle pan gesture for panning
+  const handlePanGestureEvent = Animated.event(
+    [{ nativeEvent: { translationX: panOffset.x, translationY: panOffset.y } }],
+    { useNativeDriver: false }
+  );
+
+  // Close zoom modal
+  const closeZoomModal = () => {
+    setProfileZoomModalVisible(false);
+    // Reset zoom and pan when closing
+    zoomScale.setValue(1);
+    panOffset.setValue({ x: 0, y: 0 });
   };
 
   // Optimized download button glow pulse
@@ -1376,27 +1446,7 @@ export default function ProfileScreen() {
     }
   }, [scrollDetection.isVisible, skills]);
   
-  // Initialize animations for weekly activity bars
-  useEffect(() => {
-    if (scrollDetection.isVisible) {
-      [1, 1, 1, 1, 1, 1, 1].forEach((targetHeight, index) => {
-        if (!barAnimationsRef.current[index]) {
-          barAnimationsRef.current[index] = new Animated.Value(0);
-        }
-        
-        const barHeight = barAnimationsRef.current[index];
-        const delay = index * 150;
-        setTimeout(() => {
-          Animated.timing(barHeight, {
-            toValue: targetHeight,
-            duration: 800,
-            useNativeDriver: false,
-          }).start();
-        }, delay);
-      });
-    }
-  }, [scrollDetection.isVisible]);
-
+  
   // Modal animation functions
   const animateModalIn = () => {
     Animated.parallel([
@@ -1789,7 +1839,7 @@ export default function ProfileScreen() {
                   onPress={handleEditProfilePicture}
                   activeOpacity={0.8}
                 >
-                  <Edit3 size={16} color="white" />
+                  <Camera size={16} color="white" />
                 </TouchableOpacity>
                 
                 {/* Ripple Effect */}
@@ -1959,7 +2009,7 @@ export default function ProfileScreen() {
                 (skills || []).map((skill, index) => {
                   const animations = skillAnimationsRef.current[index] || { opacity: new Animated.Value(1), scale: new Animated.Value(1) };
                   return (
-                    <Animated.Text 
+                    <Animated.View 
                       key={skill} 
                       style={[
                         styles.skillTag,
@@ -1974,58 +2024,16 @@ export default function ProfileScreen() {
                         }
                       ]}
                     >
-                      {skill}
-                    </Animated.Text>
+                      <Animated.Text style={styles.skillText}>
+                        {skill}
+                      </Animated.Text>
+                    </Animated.View>
                   );
                 }))}
             </View>
           </View>
 
-          {/* Weekly Activity Chart */}
-          <View style={styles.card}>
-            <View style={styles.cardGradient} />
-            <View style={styles.cardHeader}>
-              <Text style={styles.sectionTitle}>Weekly Activity</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 140, marginTop: 20 }}>
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => {
-                const targetHeight = [40, 65, 45, 80, 55, 30, 25][index];
-                const barHeight = barAnimationsRef.current[index] || new Animated.Value(1);
-                
-                return (
-                  <View key={index} style={{ alignItems: 'center', flex: 1 }}>
-                    <Animated.View 
-                      style={{
-                        backgroundColor: '#f1f5f9',
-                        width: '100%',
-                        height: 120,
-                        borderRadius: 12,
-                        alignItems: 'flex-end',
-                        justifyContent: 'flex-end',
-                        padding: 8,
-                        transform: [{ scale: 0.95 }]
-                      }}
-                    >
-                      <Animated.View 
-                        style={{
-                          width: '100%',
-                          height: barHeight,
-                          backgroundColor: '#3bc4ba',
-                          borderRadius: 8,
-                          shadowColor: '#3bc4ba',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 4,
-                        }}
-                      />
-                    </Animated.View>
-                    <Text style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>{day}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-
+          
           {/* Professional Assets */}
           <View style={styles.card}>
             <View style={styles.cardGradient} />
@@ -2651,6 +2659,86 @@ export default function ProfileScreen() {
                 <Text style={styles.saveButtonText}>Logout</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Profile Picture Zoom Modal */}
+      <Modal
+        visible={profileZoomModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeZoomModal}
+      >
+        <StatusBar backgroundColor="rgba(0, 0, 0, 0.9)" barStyle="light-content" />
+        <View style={styles.profileZoomModalOverlay}>
+          <View style={styles.profileZoomModalContainer}>
+            <TouchableOpacity 
+              style={styles.zoomModalCloseButton}
+              onPress={closeZoomModal}
+              activeOpacity={0.8}
+            >
+              <Eye size={24} color="white" />
+            </TouchableOpacity>
+            
+            <PinchGestureHandler
+              ref={pinchRef}
+              onGestureEvent={handlePinchGestureEvent}
+              onHandlerStateChange={(event) => {
+                if (event.nativeEvent.state === State.END) {
+                  // Smoothly animate back to bounds if needed
+                  zoomScale.addListener(({ value }) => {
+                    if (value < 1) {
+                      Animated.timing(zoomScale, {
+                        toValue: 1,
+                        duration: 200,
+                        useNativeDriver: false,
+                      }).start();
+                    } else if (value > 3) {
+                      Animated.timing(zoomScale, {
+                        toValue: 3,
+                        duration: 200,
+                        useNativeDriver: false,
+                      }).start();
+                    }
+                    zoomScale.removeAllListeners();
+                  });
+                }
+              }}
+            >
+              <Animated.View>
+                <PanGestureHandler
+                  ref={panRef}
+                  onGestureEvent={handlePanGestureEvent}
+                  onHandlerStateChange={(event) => {
+                    if (event.nativeEvent.state === State.END) {
+                      // Reset pan offset when gesture ends
+                      Animated.spring(panOffset, {
+                        toValue: { x: 0, y: 0 },
+                        useNativeDriver: false,
+                        tension: 100,
+                        friction: 8,
+                      }).start();
+                    }
+                  }}
+                >
+                  <Animated.Image
+                    source={{ uri: profileImage }}
+                    style={[
+                      styles.zoomableProfileImage,
+                      {
+                        transform: [
+                          { scale: zoomScale },
+                          { translateX: panOffset.x },
+                          { translateY: panOffset.y }
+                        ]
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+                </PanGestureHandler>
+              </Animated.View>
+            </PinchGestureHandler>
           </View>
         </View>
       </Modal>
