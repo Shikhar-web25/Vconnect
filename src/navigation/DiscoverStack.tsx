@@ -3,11 +3,13 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import DiscoverScreen from "../screens/DiscoverScreen";
 import AllSeniorsScreen from "../screens/AllSeniorsScreen";
+import CreatePostScreen from "../screens/CreatePostScreen";
 
 // ── Stack Param List (for TypeScript safety) ──────────────────────────────────
 export type DiscoverStackParamList = {
   DiscoverMain: undefined;
   AllSeniors: undefined;
+  CreatePost: undefined;
 };
 
 const Stack = createNativeStackNavigator<DiscoverStackParamList>();
@@ -26,8 +28,18 @@ const DiscoverStack = () => {
         name="AllSeniors"
         component={AllSeniorsScreen}
         options={{
-          headerShown: false, // AllSeniorsScreen has its own custom header
+          headerShown: false,
           animation: "slide_from_right",
+        }}
+      />
+
+      {/* Create Post Screen — navigated via FAB */}
+      <Stack.Screen
+        name="CreatePost"
+        component={CreatePostScreen}
+        options={{
+          headerShown: false,
+          animation: "slide_from_bottom",
         }}
       />
     </Stack.Navigator>

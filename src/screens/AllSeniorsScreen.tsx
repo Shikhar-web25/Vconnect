@@ -14,7 +14,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -29,8 +29,8 @@ interface Mentor {
   online?: 'green' | 'yellow' | null;
   highlight?: boolean;
   bio?: string;
-  experience?: string;   // e.g. "10+ yrs @ Google"
-  skills?: string;       // e.g. "ML & Analytics"
+  experience?: string;
+  skills?: string;
 }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ const MENTORS: Mentor[] = [
   },
 ];
 
-// ─── Rich Tooltip (matches Image 2 design) ────────────────────────────────────
+// ─── Rich Tooltip ─────────────────────────────────────────────────────────────
 interface TooltipProps {
   visible: boolean;
   mentor: Mentor | null;
@@ -253,7 +253,6 @@ const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
             },
           ]}
         >
-          {/* Header row: avatar + name + specialty */}
           <View style={tooltipStyles.headerRow}>
             <Image source={{ uri: mentor.avatar }} style={tooltipStyles.avatar} />
             <View style={tooltipStyles.headerText}>
@@ -262,7 +261,6 @@ const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
             </View>
           </View>
 
-          {/* Experience line */}
           {mentor.experience && (
             <View style={tooltipStyles.infoRow}>
               <Text style={tooltipStyles.starIcon}>⭐</Text>
@@ -270,7 +268,6 @@ const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
             </View>
           )}
 
-          {/* Skills line */}
           {mentor.skills && (
             <View style={tooltipStyles.infoRow}>
               <Text style={tooltipStyles.chartIcon}>📊</Text>
@@ -278,15 +275,12 @@ const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
             </View>
           )}
 
-          {/* Divider */}
           <View style={tooltipStyles.divider} />
 
-          {/* View Profile button */}
           <TouchableOpacity style={tooltipStyles.viewBtn} onPress={onClose}>
             <Text style={tooltipStyles.viewBtnText}>View Profile</Text>
           </TouchableOpacity>
 
-          {/* Downward arrow */}
           <View style={[tooltipStyles.arrow, { left: arrowLeft }]} />
         </Animated.View>
       </Pressable>
@@ -346,12 +340,8 @@ const tooltipStyles = StyleSheet.create({
     gap: 6,
     marginBottom: 6,
   },
-  starIcon: {
-    fontSize: 13,
-  },
-  chartIcon: {
-    fontSize: 13,
-  },
+  starIcon: { fontSize: 13 },
+  chartIcon: { fontSize: 13 },
   infoText: {
     fontSize: 12,
     color: '#1e293b',
@@ -471,7 +461,6 @@ const AllSeniorsScreen = () => {
       m.specialty.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Pad to fill last row
   const paddedMentors = [...filteredMentors];
   const remainder = paddedMentors.length % NUM_COLUMNS;
   if (remainder !== 0) {
@@ -505,9 +494,7 @@ const AllSeniorsScreen = () => {
           <Icon name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Top Profiles</Text>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <Icon name="tune" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={[styles.headerIconBtn, { backgroundColor: 'transparent' }]} />
       </View>
 
       {/* ── Search Bar ── */}
@@ -542,11 +529,6 @@ const AllSeniorsScreen = () => {
         style={styles.flatList}
       />
 
-      {/* ── FAB ── */}
-      <TouchableOpacity style={styles.fab} activeOpacity={0.85}>
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
-
       {/* ── Rich Tooltip ── */}
       <RichTooltip
         visible={tooltipVisible}
@@ -566,8 +548,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.headerBg,
   },
-
-  // Header
   header: {
     backgroundColor: COLORS.headerBg,
     flexDirection: 'row',
@@ -591,8 +571,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-
-  // Search
   searchBarWrapper: {
     backgroundColor: COLORS.headerBg,
     paddingHorizontal: 20,
@@ -617,8 +595,6 @@ const styles = StyleSheet.create({
     color: COLORS.textDark,
     padding: 0,
   },
-
-  // FlatList
   flatList: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -626,10 +602,8 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 100,
+    paddingBottom: 40,
   },
-
-  // Section header
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -654,8 +628,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     fontStyle: 'italic',
   },
-
-  // Grid
   mentorRow: {
     gap: 8,
     marginBottom: 8,
@@ -715,30 +687,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
     color: COLORS.textLight,
-  },
-
-  // FAB
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    zIndex: 40,
-  },
-  fabIcon: {
-    color: '#fff',
-    fontSize: 30,
-    fontWeight: '300',
-    lineHeight: 34,
   },
 });
