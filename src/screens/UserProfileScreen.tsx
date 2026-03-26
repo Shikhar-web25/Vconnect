@@ -45,11 +45,26 @@ const toImageSource = (value: any) => {
 };
 
 // Animated counter
-const Counter = ({ target, label, icon, iconColor }: { target: number; label: string; icon: string; iconColor: string }) => {
+const Counter = ({
+    target,
+    label,
+    icon,
+    iconColor,
+}: {
+    target: number | null;
+    label: string;
+    icon: string;
+    iconColor: string;
+}) => {
     const anim = useRef(new Animated.Value(0)).current;
     const [val, setVal] = useState(0);
     useEffect(() => {
+        if (target == null) {
+            setVal(0);
+            return;
+        }
         const id = anim.addListener(({ value }) => setVal(Math.floor(value)));
+        anim.setValue(0);
         Animated.timing(anim, { toValue: target, duration: 1200, useNativeDriver: false }).start();
         return () => anim.removeListener(id);
     }, [target]);
@@ -58,7 +73,7 @@ const Counter = ({ target, label, icon, iconColor }: { target: number; label: st
             <View style={[styles.statIconBg, { backgroundColor: `${iconColor}18` }]}>
                 <Ionicons name={icon} size={20} color={iconColor} />
             </View>
-            <Text style={styles.statNum}>{val}</Text>
+            <Text style={styles.statNum}>{target == null ? 'NA' : val}</Text>
             <Text style={styles.statLabel}>{label}</Text>
         </View>
     );
@@ -75,7 +90,6 @@ const UserProfileScreen = () => {
     const [profile, setProfile] = useState<PublicProfile | null>(null);
     const [viewerId, setViewerId] = useState<string | null>(null);
     const [stats, setStats] = useState({
-        contributions: 0,
         posts: 0,
         connections: 0,
     });
@@ -100,7 +114,7 @@ const UserProfileScreen = () => {
             const targetUserId = params.userId ?? user?.id ?? null;
             if (!targetUserId) return;
 
-            const [profileResult, postsResult, commentsResult, sentMessagesResult, receivedMessagesResult] =
+            const [profileResult, postsResult, sentMessagesResult, receivedMessagesResult] =
                 await Promise.all([
                     supabase
                         .from('profiles')
@@ -108,7 +122,6 @@ const UserProfileScreen = () => {
                         .eq('id', targetUserId)
                         .single(),
                     supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
-                    supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
                     supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', targetUserId),
                     supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', targetUserId),
                 ]);
@@ -119,11 +132,9 @@ const UserProfileScreen = () => {
             }
 
             const postsCount = postsResult.count ?? 0;
-            const commentsCount = commentsResult.count ?? 0;
             const connectionsCount = (sentMessagesResult.count ?? 0) + (receivedMessagesResult.count ?? 0);
 
             setStats({
-                contributions: postsCount + commentsCount,
                 posts: postsCount,
                 connections: connectionsCount,
             });
@@ -148,7 +159,10 @@ const UserProfileScreen = () => {
         profile?.year_of_study != null
             ? String(profile.year_of_study)
             : params.batch || 'NA';
-    const displayContributions = stats.contributions || params.contributions || 0;
+    const displayContributions =
+        typeof params.contributions === 'number' && Number.isFinite(params.contributions)
+            ? params.contributions
+            : null;
     const postsCount = stats.posts;
     const connectionsCount = stats.connections;
     const targetUserId = params.userId ?? null;

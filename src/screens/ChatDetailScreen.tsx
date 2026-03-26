@@ -263,7 +263,6 @@ const ChatDetailScreen = () => {
       avatar: displayAvatar,
       about: 'Hey there! I am using Vconnect',
       bio: 'Living the college life',
-      contributions: Math.floor(Math.random() * 120) + 20,
     });
   }, [chatId, displayAvatar, name, navigation, userId]);
 

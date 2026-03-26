@@ -122,6 +122,7 @@ const DmsScreen = () => {
   const [optionChat, setOptionChat] = useState<ChatItemData | null>(null);
   const [previewUser, setPreviewUser] = useState<ChatItemData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('Student');
   const [currentUserAvatar, setCurrentUserAvatar] = useState<ImageSourcePropType>(getMaleAvatar(0));
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -326,7 +327,6 @@ const DmsScreen = () => {
       avatar: currentUserAvatar,
       about: 'Hey there! I am using Vconnect',
       bio: 'Living the college life',
-      contributions: 87,
     });
   }, [currentUserAvatar, currentUserId, currentUserName, navigation]);
 
@@ -339,7 +339,6 @@ const DmsScreen = () => {
         avatar: user.avatar,
         about: user.about,
         bio: user.about,
-        contributions: Math.floor(Math.random() * 100) + 20,
       });
     },
     [navigation],
@@ -438,6 +437,13 @@ const DmsScreen = () => {
           maxToRenderPerBatch={5}
           windowSize={7}
           removeClippedSubviews
+          refreshing={refreshing}
+          onRefresh={async () => {
+            if (refreshing) return;
+            setRefreshing(true);
+            await loadChats(false, currentUserId ?? undefined);
+            setRefreshing(false);
+          }}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               {loading ? (
