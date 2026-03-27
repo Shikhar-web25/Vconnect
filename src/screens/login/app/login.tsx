@@ -397,6 +397,7 @@ const LoginScreen = () => {
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -657,6 +658,45 @@ const LoginScreen = () => {
     setLoading(false);
   };
 
+  const handleOtpLogin = async () => {
+    if (!username.trim()) {
+      setError("Enter your institutional username first");
+      shake();
+      return;
+    }
+
+    const email = getFullEmail().toLowerCase();
+    if (!email.endsWith(VIT_DOMAIN)) {
+      setError("Only VIT Bhopal emails allowed");
+      shake();
+      return;
+    }
+
+    setOtpLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+      },
+    });
+
+    setOtpLoading(false);
+    if (error) {
+      setError(error.message);
+      shake();
+      return;
+    }
+
+    setSuccessMsg("OTP sent to your email");
+    navigation.navigate("OtpVerify", {
+      email,
+      mode: "login",
+    });
+  };
+
   const handleUsernameChange = (text: string) => {
     if (text.includes("@")) {
       const clean = text.split("@")[0];
@@ -808,6 +848,18 @@ const LoginScreen = () => {
                 disabled={!canSignIn}
               />
             </Animated.View>
+
+            <View style={{ marginTop: 12 }}>
+              <AuthButton
+                title="Sign In with OTP"
+                onPress={handleOtpLogin}
+                loading={otpLoading}
+                disabled={!username.trim()}
+                variant="secondary"
+                style={styles.otpButton}
+                textStyle={styles.otpButtonText}
+              />
+            </View>
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
@@ -1025,6 +1077,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  otpButton: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.45)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  otpButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
   },
 
   divider: {

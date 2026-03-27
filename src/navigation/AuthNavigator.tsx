@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/login/app/login';
 import SignupScreen from '../screens/login/app/signup';
 import ForgotPasswordScreen from '../screens/login/app/forgot-password';
+import OtpVerifyScreen from '../screens/login/app/otp-verify';
 import SplashScreen from '../screens/SplashScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
   ForgotPassword: undefined;
+  OtpVerify: { email: string; mode: 'login' | 'signup'; fullName?: string; regNo?: string };
   Main: undefined;
   ChatDetail: { chatId: string; name: string; avatar: any; userId?: string };
   AdminDashboard: undefined;
@@ -73,6 +75,11 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
           <Stack.Screen
             name="ForgotPassword"
             component={ForgotPasswordScreen}
+            options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
+          />
+          <Stack.Screen
+            name="OtpVerify"
+            component={OtpVerifyScreen}
             options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
           />
           <Stack.Screen
