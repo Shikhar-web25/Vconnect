@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { getMaleAvatar, getFemaleAvatar } from '../utils/avatar';
 import { supabase } from '../../supabaseClient';
+import { useAppTheme } from '../theme/AppThemeContext';
 
 const isFabricEnabled = Boolean((global as any)?.nativeFabricUIManager);
 if (Platform.OS === 'android' && !isFabricEnabled && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -121,6 +122,7 @@ const ChatItem = React.memo(
 );
 
 const DmsScreen = () => {
+  const { theme, isDark } = useAppTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [searchText, setSearchText] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('All');
@@ -479,9 +481,13 @@ const DmsScreen = () => {
     ));
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={BG} translucent={false} />
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.background}
+        translucent={false}
+      />
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.headerCard}>
           <View>
             <Text style={styles.headerTitle}>Messages</Text>

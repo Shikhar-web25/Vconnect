@@ -16,6 +16,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { supabase } from '../../supabaseClient';
 import { getMaleAvatar } from '../utils/avatar';
+import { useAppTheme } from '../theme/AppThemeContext';
 
 const PRIMARY = '#4A6D8C';
 const BG = '#F1F5F9';
@@ -73,6 +74,7 @@ const extractTagsFromContent = (content?: string | null) => {
 };
 
 const DiscoverScreen = () => {
+  const { theme, isDark } = useAppTheme();
   const navigation = useNavigation<any>();
   const [searchText, setSearchText] = useState('');
   const [posts, setPosts] = useState<PostItem[]>([]);
@@ -278,9 +280,9 @@ const DiscoverScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.primary} />
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Discover</Text>
           <View style={styles.searchRow}>

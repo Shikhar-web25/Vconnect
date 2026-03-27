@@ -12,9 +12,15 @@ import {
     KeyboardAvoidingView,
     Platform,
     Keyboard,
+    ImageSourcePropType,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from '@react-native-community/blur';
+import { getMaleAvatar } from '../../utils/avatar';
+
+const ACCENT = '#5B6AF0';
+const TEXT_DARK = '#1A1A2E';
+const TEXT_MUTED = '#8892A6';
 
 interface Comment {
     id: string;
@@ -28,7 +34,7 @@ interface QuestionModalProps {
     visible: boolean;
     data: {
         userName: string;
-        userAvatar: string;
+        userAvatar: ImageSourcePropType;
         category: string;
         questionTitle: string;
         fullAnswer: string;
@@ -118,14 +124,16 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, on
                         <View style={styles.modalContent}>
                             <View style={styles.modalHeader}>
                                 <View style={styles.userInfo}>
-                                    <Image source={{ uri: data.userAvatar }} style={styles.avatarSmall} />
+                                    <View style={styles.avatarRing}>
+                                        <Image source={data.userAvatar} style={styles.avatarSmall} />
+                                    </View>
                                     <View>
                                         <Text style={styles.userName}>{data.userName}</Text>
                                         <Text style={styles.postMeta}>{data.category}</Text>
                                     </View>
                                 </View>
                                 <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                    <Icon name="close" size={24} color="#666" />
+                                    <Ionicons name="close" size={24} color={TEXT_MUTED} />
                                 </TouchableOpacity>
                             </View>
 
@@ -160,7 +168,7 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, on
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Write a comment..."
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={TEXT_MUTED}
                                     value={newComment}
                                     onChangeText={setNewComment}
                                 />
@@ -172,7 +180,7 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, on
                                     onPress={handleAddComment}
                                     disabled={!newComment.trim() || isSubmitting}
                                 >
-                                    <Icon
+                                    <Ionicons
                                         name="send"
                                         size={20}
                                         color={newComment.trim() && !isSubmitting ? "#fff" : "#CBD5E1"}
@@ -229,7 +237,7 @@ const styles = StyleSheet.create({
         padding: 24,
         width: '100%',
         maxHeight: '100%',
-        flexShrink: 1, // Allow shrinking if parent constrains
+        flexShrink: 1,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -237,11 +245,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 20,
     },
+    avatarRing: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(91,106,240,0.12)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
     avatarSmall: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        marginRight: 10,
     },
     userInfo: {
         flex: 1,
@@ -250,17 +266,17 @@ const styles = StyleSheet.create({
     },
     userName: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1A1A1A',
+        fontWeight: '700',
+        color: TEXT_DARK,
         marginBottom: 2,
     },
     postMeta: {
         fontSize: 13,
-        color: '#64748B',
+        color: TEXT_MUTED,
     },
     closeButton: {
-        padding: 4,
-        backgroundColor: '#F1F5F9',
+        padding: 6,
+        backgroundColor: '#F0F2FA',
         borderRadius: 20,
     },
     modalScroll: {
@@ -268,28 +284,28 @@ const styles = StyleSheet.create({
         flexShrink: 1,
     },
     modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#0F172A',
+        fontSize: 18,
+        fontWeight: '700',
+        color: TEXT_DARK,
         marginBottom: 16,
-        lineHeight: 28,
+        lineHeight: 26,
     },
     divider: {
         height: 1,
-        backgroundColor: '#E2E8F0',
+        backgroundColor: '#F0F2FA',
         marginVertical: 16,
     },
     sectionTitle: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '700',
-        color: '#94A3B8',
+        color: TEXT_MUTED,
         marginBottom: 12,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     modalBody: {
-        fontSize: 16,
-        color: '#334155',
+        fontSize: 15,
+        color: '#475569',
         lineHeight: 24,
     },
     commentsList: {
@@ -307,10 +323,10 @@ const styles = StyleSheet.create({
     },
     commentContent: {
         flex: 1,
-        backgroundColor: '#F8FAFC',
+        backgroundColor: '#F0F2FA',
         padding: 12,
-        borderRadius: 12,
-        borderTopLeftRadius: 0,
+        borderRadius: 14,
+        borderTopLeftRadius: 4,
     },
     commentHeader: {
         flexDirection: 'row',
@@ -321,11 +337,11 @@ const styles = StyleSheet.create({
     commentName: {
         fontSize: 13,
         fontWeight: '700',
-        color: '#334155',
+        color: TEXT_DARK,
     },
     commentTime: {
         fontSize: 11,
-        color: '#94A3B8',
+        color: TEXT_MUTED,
     },
     commentText: {
         fontSize: 14,
@@ -338,16 +354,16 @@ const styles = StyleSheet.create({
         marginTop: 16,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#E2E8F0',
+        borderTopColor: '#F0F2FA',
     },
     input: {
         flex: 1,
-        backgroundColor: '#F1F5F9',
+        backgroundColor: '#F0F2FA',
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 10,
         fontSize: 15,
-        color: '#334155',
+        color: TEXT_DARK,
         marginRight: 12,
         maxHeight: 100,
     },
@@ -355,7 +371,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#4A6D8C',
+        backgroundColor: ACCENT,
         justifyContent: 'center',
         alignItems: 'center',
     },

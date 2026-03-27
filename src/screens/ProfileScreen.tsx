@@ -30,6 +30,7 @@ import {
   type CloudinaryDeliveryType,
   type CloudinaryResourceType,
 } from '../lib/cloudinary';
+import { useAppTheme } from '../theme/AppThemeContext';
 
 type ProfileRecord = {
   id: string;
@@ -145,6 +146,7 @@ const normalizeCloudinaryDeliveryType = (value?: string | null): CloudinaryDeliv
 };
 
 export default function ProfileScreen() {
+  const { theme, isDark, mode, toggleMode } = useAppTheme();
   const navigation = useNavigation<any>();
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
@@ -640,8 +642,8 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingScreen}>
-        <StatusBar barStyle="light-content" backgroundColor="#16365F" />
+      <SafeAreaView style={[styles.loadingScreen, { backgroundColor: theme.heroStart }]}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.heroStart} />
         <View style={styles.loadingCard}>
           <MaterialCommunityIcons name="account-circle-outline" size={36} color="#8CCBFF" />
           <Text style={styles.loadingTitle}>Loading profile</Text>
@@ -654,15 +656,15 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#16365F" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.heroStart} />
       <ScrollView
-        style={styles.screen}
+        style={[styles.screen, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadProfile()} tintColor="#16365F" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadProfile()} tintColor={theme.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        <LinearGradient colors={['#16365F', '#1B4B7E', '#2E7BAA']} style={styles.heroSection}>
+        <LinearGradient colors={[theme.heroStart, theme.heroMid, theme.heroEnd]} style={styles.heroSection}>
           <View style={styles.heroTopRow}>
             <View>
               <Text style={styles.heroEyebrow}>Vconnect</Text>
@@ -896,6 +898,44 @@ export default function ProfileScreen() {
             )}
           </View>
 
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Appearance</Text>
+              <MaterialCommunityIcons
+                name={isDark ? 'weather-night' : 'white-balance-sunny'}
+                size={18}
+                color={isDark ? '#93C5FD' : '#1D4ED8'}
+              />
+            </View>
+            <Text style={styles.cardBody}>
+              Switch between light and dark mode. Your choice is saved on this device.
+            </Text>
+            <TouchableOpacity
+              style={[styles.themeToggleButton, isDark ? styles.themeToggleButtonDark : styles.themeToggleButtonLight]}
+              onPress={toggleMode}
+              activeOpacity={0.9}
+            >
+              <MaterialCommunityIcons
+                name={isDark ? 'moon-waning-crescent' : 'weather-sunny'}
+                size={20}
+                color={isDark ? '#E2E8F0' : '#0F172A'}
+              />
+              <View style={styles.themeToggleTextWrap}>
+                <Text style={[styles.themeToggleTitle, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>
+                  {isDark ? 'Dark mode enabled' : 'Light mode enabled'}
+                </Text>
+                <Text style={[styles.themeToggleSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  {isDark ? 'Tap to switch to light mode' : 'Tap to switch to dark mode'}
+                </Text>
+              </View>
+              <View style={[styles.themeModePill, isDark ? styles.themeModePillDark : styles.themeModePillLight]}>
+                <Text style={[styles.themeModePillText, { color: isDark ? '#E2E8F0' : '#1D4ED8' }]}>
+                  {mode.toUpperCase()}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
             <MaterialCommunityIcons name="logout" size={20} color="#FFFFFF" />
             <Text style={styles.logoutButtonText}>Log out</Text>
@@ -904,7 +944,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <Modal visible={profileModalVisible} transparent animationType="fade" onRequestClose={() => setProfileModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
             <TextInput style={styles.input} value={draftName} onChangeText={setDraftName} placeholder="Full name" placeholderTextColor="#94A3B8" />
@@ -941,7 +981,7 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal visible={skillsModalVisible} transparent animationType="fade" onRequestClose={() => setSkillsModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit Skills</Text>
             <Text style={styles.modalHint}>One skill per line, or separate them with commas.</Text>
@@ -959,7 +999,7 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal visible={socialModalVisible} transparent animationType="fade" onRequestClose={() => setSocialModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit Social Links</Text>
             <Text style={styles.modalHint}>One link per line. Missing protocols will be normalized to https://.</Text>
@@ -977,7 +1017,7 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal visible={resumeModalVisible} transparent animationType="fade" onRequestClose={() => setResumeModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Resume Link</Text>
             <Text style={styles.modalHint}>
@@ -1101,6 +1141,58 @@ const styles = StyleSheet.create({
   postMeta: { marginTop: 6, color: '#94A3B8', fontSize: 12, fontWeight: '700' },
   logoutButton: { marginTop: 8, height: 56, borderRadius: 18, backgroundColor: '#D9485F', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   logoutButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  themeToggleButton: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+  },
+  themeToggleButtonLight: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  themeToggleButtonDark: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+  },
+  themeToggleTextWrap: {
+    flex: 1,
+  },
+  themeToggleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  themeToggleSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  themeModePill: {
+    minWidth: 54,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  themeModePillLight: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#BFDBFE',
+  },
+  themeModePillDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
+  themeModePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 },
   modalCard: { borderRadius: 24, backgroundColor: '#FFFFFF', padding: 20 },
   modalTitle: { color: '#16365F', fontSize: 20, fontWeight: '800', marginBottom: 8 },

@@ -25,6 +25,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { getMaleAvatar } from '../utils/avatar';
 import { supabase } from '../../supabaseClient';
+import { useAppTheme } from '../theme/AppThemeContext';
 
 const DEEP = '#1E1B4B';
 const ACCENT = '#5B6AF0';
@@ -55,6 +56,7 @@ const toImageSource = (value: any): ImageSourcePropType => {
 };
 
 const ChatDetailScreen = () => {
+  const { theme, isDark } = useAppTheme();
   const navigation = useNavigation<Nav>();
   const route = useRoute<ChatDetailScreenRouteProp>();
   const { chatId, name, avatar, userId } = route.params || {
@@ -359,8 +361,8 @@ const ChatDetailScreen = () => {
   );
 
   return (
-    <View style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }} activeOpacity={0.7}>

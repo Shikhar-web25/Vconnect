@@ -1,22 +1,47 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import React, { useState, useRef } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    Image,
+    TouchableOpacity,
+    Animated,
+    Easing,
+    Modal,
+    TouchableWithoutFeedback,
+} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { ImageSourcePropType } from 'react-native';
+
+const DEEP = '#1E1B4B';
+const ACCENT = '#5B6AF0';
+const TEXT_DARK = '#1A1A2E';
+const TEXT_MUTED = '#8892A6';
 
 interface QuestionCardProps {
     id: string;
+    userId?: string;
     userName: string;
-    userAvatar: string;
+    userAvatar: ImageSourcePropType;
     timePosted: string;
     category: string;
     questionTitle: string;
     questionPreview: string;
     likeCount?: number;
     commentCount?: number;
+    isLiked?: boolean;
+    isSaved?: boolean;
     onSeeMore: (id: string) => void;
+    onLike: (id: string) => void;
+    onSave: (id: string) => void;
+    onDelete?: (id: string) => void;
+    onAvatarPress: (user: { id: string; name: string; avatar: ImageSourcePropType; category: string }) => void;
+    batch?: string;
 }
 
 const QuestionCard: React.FC<QuestionCardProps> = ({
     id,
+    userId,
     userName,
     userAvatar,
     timePosted,
@@ -25,150 +50,381 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
     questionPreview,
     likeCount = 0,
     commentCount = 0,
+    isLiked = false,
+    isSaved = false,
     onSeeMore,
+    onLike,
+    onSave,
+    onDelete,
+    onAvatarPress,
+    batch,
 }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const saveScaleAnim = useRef(new Animated.Value(1)).current;
+    const [showOptions, setShowOptions] = useState(false);
+
+    const handleLike = () => {
+        Animated.sequence([
+            Animated.timing(scaleAnim, {
+                toValue: 1.3,
+                duration: 100,
+                easing: Easing.ease,
+                useNativeDriver: true,
+            }),
+            Animated.timing(scaleAnim, {
+                toValue: 1,
+                duration: 100,
+                easing: Easing.ease,
+                useNativeDriver: true,
+            }),
+        ]).start();
+        onLike(id);
+    };
+
+    const handleSave = () => {
+        Animated.sequence([
+            Animated.timing(saveScaleAnim, {
+                toValue: 1.3,
+                duration: 100,
+                easing: Easing.ease,
+                useNativeDriver: true,
+            }),
+            Animated.timing(saveScaleAnim, {
+                toValue: 1,
+                duration: 100,
+                easing: Easing.ease,
+                useNativeDriver: true,
+            }),
+        ]).start();
+        onSave(id);
+    };
+
+    const handleAvatarPress = () => {
+        onAvatarPress({
+            id: userId ?? id,
+            name: userName,
+            avatar: userAvatar,
+            category,
+        });
+    };
+
+    const handleDelete = () => {
+        setShowOptions(false);
+        onDelete?.(id);
+    };
+
     return (
         <View style={styles.card}>
             {/* Header Row */}
             <View style={styles.headerRow}>
-                <View style={styles.userInfo}>
-                    <Image source={{ uri: userAvatar }} style={styles.avatar} />
+                <TouchableOpacity
+                    style={styles.userInfo}
+                    onPress={handleAvatarPress}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.avatarRing}>
+                        <Image source={userAvatar} style={styles.avatar} />
+                    </View>
                     <View>
                         <Text style={styles.userName}>{userName}</Text>
                         <Text style={styles.postMeta}>
                             posted {timePosted} in <Text style={styles.category}>{category}</Text>
                         </Text>
                     </View>
-                </View>
-                <TouchableOpacity>
-                    <Icon name="dots-horizontal" size={24} color="#94A3B8" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.moreBtn}
+                    onPress={() => setShowOptions(true)}
+                    activeOpacity={0.7}
+                >
+                    <Ionicons name="ellipsis-horizontal" size={20} color={TEXT_MUTED} />
                 </TouchableOpacity>
             </View>
 
-            {/* Content */}
-            <Text style={styles.title}>{questionTitle}</Text>
-            <Text style={styles.body} numberOfLines={3}>
-                {questionPreview}
-            </Text>
-
-            {/* Divider */}
-            <View style={styles.divider} />
+            {/* Content - Clickable to open details */}
+            <TouchableOpacity onPress={() => onSeeMore(id)} activeOpacity={0.8}>
+                <Text style={styles.title}>{questionTitle}</Text>
+                <Text style={styles.body} numberOfLines={3}>
+                    {questionPreview}
+                </Text>
+            </TouchableOpacity>
 
             {/* Actions Row */}
             <View style={styles.actionsRow}>
-                <View style={styles.statsContainer}>
-                    <View style={styles.statItem}>
-                        <Icon name="thumb-up" size={18} color="#64748B" />
-                        <Text style={styles.statText}>{likeCount}</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Icon name="comment" size={18} color="#64748B" />
-                        <Text style={styles.statText}>{commentCount}</Text>
-                    </View>
-                </View>
-
+                {/* Like Button */}
                 <TouchableOpacity
-                    style={styles.detailsBtn}
-                    onPress={() => onSeeMore(id)}
+                    style={styles.actionBtn}
+                    onPress={handleLike}
+                    activeOpacity={0.7}
                 >
-                    <Text style={styles.detailsText}>Details</Text>
-                    <Icon name="chevron-right" size={16} color="#4A6D8C" />
+                    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                        <Ionicons
+                            name={isLiked ? 'heart' : 'heart-outline'}
+                            size={22}
+                            color={isLiked ? '#EF4444' : TEXT_MUTED}
+                        />
+                    </Animated.View>
+                    <Text style={[styles.actionText, isLiked && styles.actionTextLiked]}>
+                        {likeCount + (isLiked ? 1 : 0)}
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Comment Button */}
+                <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => onSeeMore(id)}
+                    activeOpacity={0.7}
+                >
+                    <Ionicons name="chatbubble-outline" size={20} color={TEXT_MUTED} />
+                    <Text style={styles.actionText}>{commentCount}</Text>
+                </TouchableOpacity>
+
+                {/* Save Button - Right most */}
+                <TouchableOpacity
+                    style={styles.saveBtn}
+                    onPress={handleSave}
+                    activeOpacity={0.7}
+                >
+                    <Animated.View style={{ transform: [{ scale: saveScaleAnim }] }}>
+                        <Ionicons
+                            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                            size={20}
+                            color={isSaved ? ACCENT : TEXT_MUTED}
+                        />
+                    </Animated.View>
                 </TouchableOpacity>
             </View>
+
+            {/* Options Modal */}
+            <Modal
+                transparent
+                visible={showOptions}
+                animationType="fade"
+                onRequestClose={() => setShowOptions(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setShowOptions(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.optionSheet}>
+                                <View style={styles.optionHandle} />
+                                <Text style={styles.optionTitle}>{userName}'s Post</Text>
+                                
+                                <TouchableOpacity
+                                    style={styles.optionItem}
+                                    onPress={() => {
+                                        setShowOptions(false);
+                                        onSeeMore(id);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.optionIcon, { backgroundColor: '#EEF0FA' }]}>
+                                        <Ionicons name="eye" size={20} color={ACCENT} />
+                                    </View>
+                                    <Text style={styles.optionText}>View Post</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.optionItem}
+                                    onPress={handleSave}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.optionIcon, { backgroundColor: '#F0FDF4' }]}>
+                                        <Ionicons
+                                            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                                            size={20}
+                                            color="#22C55E"
+                                        />
+                                    </View>
+                                    <Text style={styles.optionText}>
+                                        {isSaved ? 'Unsave Post' : 'Save Post'}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.optionItem}
+                                    onPress={handleDelete}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.optionIcon, { backgroundColor: '#FEE2E2' }]}>
+                                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                    </View>
+                                    <Text style={[styles.optionText, { color: '#EF4444' }]}>
+                                        Delete Post
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.cancelBtn}
+                                    onPress={() => setShowOptions(false)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.cancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: '#fff',
-        borderRadius: 24,
-        padding: 20,
-        marginBottom: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 18,
+        marginBottom: 12,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 3,
     },
     headerRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 14,
     },
     userInfo: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
+    },
+    avatarRing: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(91,106,240,0.12)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
     avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        marginRight: 12,
-        backgroundColor: '#F1F5F9', // Fallback color
+        width: 42,
+        height: 42,
+        borderRadius: 21,
     },
     userName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1E293B',
+        fontSize: 15,
+        fontWeight: '700',
+        color: TEXT_DARK,
         marginBottom: 2,
     },
     postMeta: {
         fontSize: 12,
-        color: '#94A3B8',
+        color: TEXT_MUTED,
     },
     category: {
-        color: '#4A6D8C',
+        color: ACCENT,
         fontWeight: '600',
     },
+    moreBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F0F2FA',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#0F172A',
+        fontSize: 17,
+        fontWeight: '700',
+        color: TEXT_DARK,
         marginBottom: 8,
-        lineHeight: 26,
+        lineHeight: 24,
     },
     body: {
         fontSize: 14,
-        color: '#64748B',
-        lineHeight: 22,
-        marginBottom: 16,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#F1F5F9',
+        color: TEXT_MUTED,
+        lineHeight: 21,
         marginBottom: 16,
     },
     actionsRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F2FA',
+        gap: 24,
     },
-    statsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 20,
-    },
-    statItem: {
+    actionBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
     },
-    statText: {
-        fontSize: 13,
+    actionText: {
+        fontSize: 14,
         fontWeight: '600',
-        color: '#64748B',
+        color: TEXT_MUTED,
     },
-    detailsBtn: {
+    actionTextLiked: {
+        color: '#EF4444',
+    },
+    saveBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        marginLeft: 'auto',
     },
-    detailsText: {
-        fontSize: 13,
+    // Options Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(30,26,46,0.5)',
+        justifyContent: 'flex-end',
+    },
+    optionSheet: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 36,
+    },
+    optionHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#E2E8F0',
+        alignSelf: 'center',
+        marginBottom: 16,
+    },
+    optionTitle: {
+        fontSize: 18,
         fontWeight: '700',
-        color: '#4A6D8C',
+        color: TEXT_DARK,
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    optionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+    },
+    optionIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    optionText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#334155',
+    },
+    cancelBtn: {
+        marginTop: 10,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 14,
+        paddingVertical: 14,
+        alignItems: 'center',
+    },
+    cancelText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#64748B',
     },
 });
 
