@@ -27,19 +27,83 @@ import { supabase } from "../../../../supabaseClient";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const VIT_DOMAIN = "@vitbhopal.ac.in";
-const TERMS_OF_USE_TEXT = `Replace this placeholder with your full Terms and Conditions text.
+const TERMS_OF_USE_TEXT = `Terms of Service
 
-You can paste the entire content here as one long string.
+Last Updated: date..to be inserted 
 
-Suggested sections:
-1. Eligibility and institutional email use
-2. Acceptable conduct
-3. Content ownership and moderation
-4. Reporting and enforcement
-5. Privacy and data usage
-6. Limitation of liability
-7. Contact details
-`;
+Welcome to VConnect. These Terms of Service govern your access to and use of the VConnect application and related services. By creating an account or using the app, you agree to comply with these Terms.
+
+1. Eligibility
+
+This application is intended exclusively for currently enrolled students of VIT Bhopal.
+To register and use the platform, users must sign up using their official institutional email ID.
+
+Accounts created using unauthorized, fake, or impersonated email IDs are not permitted and may be removed without prior notice.
+
+2. Account Responsibility
+
+You are responsible for:
+
+- Maintaining the confidentiality of your login credentials
+- All activity that occurs under your account
+- Ensuring your institutional email ID is used only by you
+
+Sharing accounts or allowing others to access your account is prohibited.
+
+3. Acceptable Use
+
+Users agree to use the platform in a respectful and lawful manner. The following activities are strictly prohibited:
+
+- Harassment, abuse, or threats toward other users
+- Trolling, hate speech, or discriminatory content
+- Impersonation of another student, staff member, or organization
+- Posting false, misleading, or harmful information
+- Attempting to gain unauthorized access to other accounts or system data
+- Misuse of institutional identity or credentials
+
+4. Institutional Email Requirement
+
+Access to the platform is restricted to verified student email IDs issued by VIT Bhopal.
+If any account is found to be using an unauthorized email ID, manipulated credentials, or another person’s identity, the account may be suspended or permanently removed.
+
+5. Content and Conduct
+
+Users are solely responsible for the content they post or share. The platform reserves the right to:
+
+- Remove inappropriate or violating content
+- Suspend or ban users involved in abuse or misconduct
+- Take corrective action without prior warning in serious cases
+
+6. Privacy
+
+Basic user data is collected only as necessary to operate the platform. Information is not sold to third parties. Administrative access may be used to review accounts or content in cases of reported misuse or policy violations.
+
+7. Service Availability
+
+The app is provided on an “as is” basis. Availability, features, and functionality may change or be interrupted without notice. The platform is not liable for data loss, downtime, or service interruptions.
+
+8. Enforcement and Termination
+
+Violation of these Terms may result in:
+
+- Warning notices
+- Temporary suspension
+- Permanent removal from the platform
+
+Serious misuse, identity abuse, or repeated harassment may lead to immediate termination of access.
+
+9. Changes to Terms
+
+These Terms may be updated from time to time. Continued use of the app after updates means you accept the revised Terms.
+
+10. Contact
+
+For questions, reports, or concerns regarding misuse or violations, contact the app administration team through official in-app or institutional channels.
+
+By signing up, you acknowledge that you have read, understood, and agree to these Terms of Service. Your cooperation in maintaining a safe and respectful community is appreciated.`;
+
+const sanitizeForEmail = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9._-]/g, "");
 
 // ---------------------------------------------------------------------------
 // Floating Background Particle
@@ -658,8 +722,8 @@ const SignUpScreen: React.FC = () => {
   const ctaPulseAnim = useRef(new Animated.Value(1)).current;
 
   const getGeneratedEmail = () => {
-    const firstName = name.trim().split(" ")[0].toLowerCase();
-    const regNumber = regNo.trim().toLowerCase();
+    const firstName = sanitizeForEmail(name.trim().split(" ")[0] ?? "");
+    const regNumber = sanitizeForEmail(regNo.trim());
 
     if (!firstName) return "yourname@vitbhopal.ac.in";
     if (!regNumber) return `${firstName}@vitbhopal.ac.in`;
