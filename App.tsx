@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text, Animated, TouchableOpacity } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text, Animated, TouchableOpacity, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 import AuthNavigator from './src/navigation/AuthNavigator';
@@ -45,9 +45,21 @@ function AppShell() {
       setSession(nextSession);
     });
 
+    const handleAppStateChange = (state: string) => {
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    };
+
+    handleAppStateChange(AppState.currentState);
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      appStateSub.remove();
       removeGlobalHandler();
     };
   }, []);

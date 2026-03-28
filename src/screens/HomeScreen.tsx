@@ -24,13 +24,13 @@ const FALLBACK_AVATAR = 'https://i.pravatar.cc/150?img=12';
 const ALL_POSTS = 'All Posts';
 
 const POST_SELECT_VARIANTS = [
-    'id, user_id, title, content, created_at, likes_count, comments_count, profiles (id, full_name, username, avatar_url, branch, year_of_study)',
-    'id, user_id, title, content, created_at, likes_count, comments_count, profiles (id, full_name, username, avatar_url)',
-    'id, user_id, content, created_at, likes_count, comments_count, profiles (id, full_name, username, avatar_url)',
+    'id, user_id, title, content, created_at, likes_count, comments_count, profiles:user_id (id, full_name, username, avatar_url, branch, year_of_study)',
+    'id, user_id, title, content, created_at, likes_count, comments_count, profiles:user_id (id, full_name, username, avatar_url)',
+    'id, user_id, content, created_at, likes_count, comments_count, profiles:user_id (id, full_name, username, avatar_url)',
 ];
 
 const COMMENT_SELECT_VARIANTS = [
-    'id, content, created_at, user_id, profiles (id, full_name, username, avatar_url)',
+    'id, content, created_at, user_id, profiles:user_id (id, full_name, username, avatar_url)',
     'id, content, created_at, user_id',
 ];
 
@@ -159,6 +159,16 @@ const HomeScreen = () => {
         }
     }, [selectedQuestionId]);
 
+    const loadSavedPosts = useCallback(async (userId: string) => {
+        const { data } = await supabase
+            .from('saves')
+            .select('post_id')
+            .eq('user_id', userId);
+
+        const nextSaved = new Set<string>((data ?? []).map((row: any) => row.post_id).filter(Boolean));
+        setSavedPosts(nextSaved);
+    }, []);
+
     const loadCurrentUser = useCallback(async () => {
         const {
             data: { user },
@@ -178,12 +188,14 @@ const HomeScreen = () => {
                 .single();
             if (!error && data && typeof data === 'object' && 'id' in data) {
                 setCurrentUser(data as CurrentUser);
+                await loadSavedPosts(user.id);
                 return;
             }
         }
 
         setCurrentUser({ id: user.id });
-    }, []);
+        await loadSavedPosts(user.id);
+    }, [loadSavedPosts]);
 
     const loadPosts = useCallback(async () => {
         setLoading(true);
@@ -221,6 +233,9 @@ const HomeScreen = () => {
         const channel = supabase
             .channel('home-feed-live')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+                loadPosts();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
                 loadPosts();
             })
             .subscribe();
@@ -287,27 +302,21 @@ const HomeScreen = () => {
             content: text,
         };
 
-        let inserted: any = null;
+        const { data: inserted, error: insertError } = await supabase
+            .from('comments')
+            .insert(insertPayload)
+            .select('id, content, created_at, user_id')
+            .single();
 
-        for (const selectValue of COMMENT_SELECT_VARIANTS) {
-            const { data, error } = await supabase
-                .from('comments')
-                .insert(insertPayload)
-                .select(selectValue)
-                .single();
-            if (!error && data) {
-                inserted = data;
-                break;
-            }
+        if (insertError || !inserted) {
+            setErrorMessage(insertError?.message ?? 'Could not add comment.');
+            return null;
         }
 
-        if (!inserted) return null;
-
-        const profile = normalizeProfile(inserted);
         const comment: FeedComment = {
             id: inserted.id,
-            userName: profile?.full_name ?? profile?.username ?? currentUser.full_name ?? currentUser.username ?? 'You',
-            avatar: profile?.avatar_url ?? currentUser.avatar_url ?? FALLBACK_AVATAR,
+            userName: currentUser.full_name ?? currentUser.username ?? 'You',
+            avatar: currentUser.avatar_url ?? FALLBACK_AVATAR,
             text: inserted.content ?? text,
             time: formatTimeAgo(inserted.created_at),
         };
@@ -324,6 +333,12 @@ const HomeScreen = () => {
                     : post,
             ),
         );
+
+        const currentCommentCount = posts.find((post) => post.id === postId)?.commentCount ?? 0;
+        await supabase
+            .from('posts')
+            .update({ comments_count: currentCommentCount + 1 })
+            .eq('id', postId);
 
         return comment;
     };
@@ -442,17 +457,56 @@ const HomeScreen = () => {
         });
     }, []);
 
-    const handleSave = useCallback((id: string) => {
-        setSavedPosts((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
+    const handleSave = useCallback(
+        async (id: string) => {
+            if (!currentUser?.id) return;
+
+            const wasSaved = savedPosts.has(id);
+            setSavedPosts((prev) => {
+                const next = new Set(prev);
+                if (wasSaved) {
+                    next.delete(id);
+                } else {
+                    next.add(id);
+                }
+                return next;
+            });
+
+            if (wasSaved) {
+                const { error } = await supabase
+                    .from('saves')
+                    .delete()
+                    .eq('user_id', currentUser.id)
+                    .eq('post_id', id);
+
+                if (error) {
+                    setErrorMessage(error.message);
+                    setSavedPosts((prev) => new Set(prev).add(id));
+                }
+                return;
             }
-            return next;
-        });
-    }, []);
+
+            const { error } = await supabase
+                .from('saves')
+                .insert({
+                    user_id: currentUser.id,
+                    post_id: id,
+                });
+
+            if (error) {
+                const isDuplicate = `${error.message ?? ''}`.toLowerCase().includes('duplicate');
+                if (!isDuplicate) {
+                    setErrorMessage(error.message);
+                    setSavedPosts((prev) => {
+                        const next = new Set(prev);
+                        next.delete(id);
+                        return next;
+                    });
+                }
+            }
+        },
+        [currentUser?.id, savedPosts],
+    );
 
     const handleDelete = useCallback(
         async (id: string) => {

@@ -213,10 +213,21 @@ const DmsScreen = () => {
         });
       }
 
-      const { data: profiles } = await supabase
+      let profiles: any[] | null = null;
+      const withBio = await supabase
         .from('profiles')
         .select('id, full_name, username, avatar_url, bio, year_of_study')
         .in('id', otherIds);
+
+      if (!withBio.error) {
+        profiles = withBio.data as any[] | null;
+      } else if (`${withBio.error.message ?? ''}`.toLowerCase().includes('bio')) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url, year_of_study')
+          .in('id', otherIds);
+        profiles = fallback.data as any[] | null;
+      }
 
       const profileMap = new Map<string, any>();
       (profiles ?? []).forEach((p: any) => profileMap.set(p.id, p));
@@ -408,12 +419,31 @@ const DmsScreen = () => {
     }
 
     setNewDmLoading(true);
-    const { data, error } = await supabase
+    let data: any = null;
+    let error: any = null;
+    const withBio = await supabase
       .from('profiles')
       .select('id, full_name, username, avatar_url, bio, year_of_study, email')
       .eq('email', email)
       .limit(1)
       .maybeSingle();
+
+    if (!withBio.error) {
+      data = withBio.data;
+      error = null;
+    } else if (`${withBio.error.message ?? ''}`.toLowerCase().includes('bio')) {
+      const fallback = await supabase
+        .from('profiles')
+        .select('id, full_name, username, avatar_url, year_of_study, email')
+        .eq('email', email)
+        .limit(1)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    } else {
+      data = withBio.data;
+      error = withBio.error;
+    }
     setNewDmLoading(false);
 
     if (error) {

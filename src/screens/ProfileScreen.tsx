@@ -61,6 +61,13 @@ type RecentPost = {
   comments_count?: number | null;
 };
 
+type StatItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  meta: string;
+};
+
 const formatYearLabel = (year?: number | null) => {
   if (!year) return 'Year not set';
   if (year === 1) return '1st Year';
@@ -176,6 +183,10 @@ export default function ProfileScreen() {
   const [draftResumeFormat, setDraftResumeFormat] = useState('pdf');
   const [draftResumeResourceType, setDraftResumeResourceType] = useState<CloudinaryResourceType>('raw');
   const [draftResumeDeliveryType, setDraftResumeDeliveryType] = useState<CloudinaryDeliveryType>('private');
+  const [statsModalVisible, setStatsModalVisible] = useState(false);
+  const [statsModalTitle, setStatsModalTitle] = useState<'Posts' | 'Replies' | 'Saved'>('Posts');
+  const [statsModalLoading, setStatsModalLoading] = useState(false);
+  const [statsModalItems, setStatsModalItems] = useState<StatItem[]>([]);
   const skeletonPulse = useRef(new Animated.Value(0.4)).current;
   const themeToggleAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
 
@@ -629,6 +640,123 @@ export default function ProfileScreen() {
     await Linking.openURL(finalUrl);
   };
 
+  const openStatsModal = async (section: 'posts' | 'replies' | 'saved') => {
+    if (!profile?.id) return;
+
+    const titleMap: Record<typeof section, 'Posts' | 'Replies' | 'Saved'> = {
+      posts: 'Posts',
+      replies: 'Replies',
+      saved: 'Saved',
+    };
+
+    setStatsModalTitle(titleMap[section]);
+    setStatsModalVisible(true);
+    setStatsModalLoading(true);
+    setStatsModalItems([]);
+
+    try {
+      if (section === 'posts') {
+        const { data } = await supabase
+          .from('posts')
+          .select('id, title, content, created_at, comments_count')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        const mapped = (data ?? []).map((post: any) => ({
+          id: post.id,
+          title: post.title?.trim() || 'Untitled post',
+          subtitle: post.content?.trim() || 'No body text added.',
+          meta: `${formatRelativeTime(post.created_at)} • ${post.comments_count ?? 0} comments`,
+        })) as StatItem[];
+
+        setStatsModalItems(mapped);
+        return;
+      }
+
+      if (section === 'replies') {
+        const { data: commentsData } = await supabase
+          .from('comments')
+          .select('id, post_id, content, created_at')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(120);
+
+        const comments = commentsData ?? [];
+        const postIds = Array.from(new Set(comments.map((item: any) => item.post_id).filter(Boolean)));
+
+        let postMap = new Map<string, any>();
+        if (postIds.length > 0) {
+          const { data: relatedPosts } = await supabase
+            .from('posts')
+            .select('id, title, content')
+            .in('id', postIds);
+          postMap = new Map((relatedPosts ?? []).map((post: any) => [post.id, post]));
+        }
+
+        const mapped = comments.map((comment: any) => {
+          const post = postMap.get(comment.post_id);
+          const postTitle = post?.title?.trim() || post?.content?.trim() || 'Post';
+          return {
+            id: comment.id,
+            title: postTitle,
+            subtitle: comment.content?.trim() || 'No reply text.',
+            meta: formatRelativeTime(comment.created_at),
+          };
+        }) as StatItem[];
+
+        setStatsModalItems(mapped);
+        return;
+      }
+
+      const { data: savedRows } = await supabase
+        .from('saves')
+        .select('id, post_id, created_at')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(120);
+
+      const saves = savedRows ?? [];
+      const savedPostIds = Array.from(new Set(saves.map((item: any) => item.post_id).filter(Boolean)));
+
+      let postMap = new Map<string, any>();
+      if (savedPostIds.length > 0) {
+        let postData: any[] | null = null;
+        const withProfile = await supabase
+          .from('posts')
+          .select('id, title, content, profiles:user_id(full_name, username)')
+          .in('id', savedPostIds);
+
+        if (!withProfile.error) {
+          postData = withProfile.data as any[] | null;
+        } else {
+          const fallback = await supabase
+            .from('posts')
+            .select('id, title, content')
+            .in('id', savedPostIds);
+          postData = fallback.data as any[] | null;
+        }
+
+        postMap = new Map((postData ?? []).map((post: any) => [post.id, post]));
+      }
+
+      const mapped = saves.map((save: any) => {
+        const post = postMap.get(save.post_id);
+        const author = post?.profiles?.full_name ?? post?.profiles?.username ?? 'Student';
+        return {
+          id: save.id,
+          title: post?.title?.trim() || 'Saved post',
+          subtitle: post?.content?.trim() || 'No body text added.',
+          meta: `Saved ${formatRelativeTime(save.created_at)}${author ? ` • by ${author}` : ''}`,
+        };
+      }) as StatItem[];
+
+      setStatsModalItems(mapped);
+    } finally {
+      setStatsModalLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert('Log out', 'This will end the current session on this device.', [
       { text: 'Cancel', style: 'cancel' },
@@ -636,11 +764,17 @@ export default function ProfileScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: async () => {
-          const { error } = await supabase.auth.signOut({ scope: 'local' });
+          const { error } = await supabase.auth.signOut();
           if (error) {
             Alert.alert('Logout failed', error.message);
             return;
           }
+          setProfile(null);
+          setProfileColumns([]);
+          setRecentPosts([]);
+          setPostsCount(0);
+          setCommentsCount(0);
+          setSavesCount(0);
         },
       },
     ]);
@@ -669,9 +803,6 @@ export default function ProfileScreen() {
   const displayName = profile?.full_name ?? profile?.username ?? 'Student';
   const subtitle = [profile?.branch, formatYearLabel(profile?.year_of_study)].filter(Boolean).join(' • ');
   const roleLabel = formatRoleLabel(profile?.role_level);
-  const missingColumns = ['skills', 'social_links', 'resume_url', 'resume_file_name'].filter(
-    (column) => !hasColumn(column),
-  );
   const missingPrivateResumeColumns = [
     'resume_public_id',
     'resume_format',
@@ -765,37 +896,10 @@ export default function ProfileScreen() {
         </LinearGradient>
 
         <View style={styles.contentSection}>
-          {missingColumns.length > 0 && (
-            <View
-              style={[
-                styles.setupCard,
-                {
-                  backgroundColor: isDark ? '#2F2410' : '#FFF8E8',
-                  borderColor: isDark ? '#4B3B1A' : '#F2D59C',
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.setupIconWrap,
-                  { backgroundColor: isDark ? '#4B3B1A' : '#FFE8B1' },
-                ]}
-              >
-                <MaterialCommunityIcons name="database-cog-outline" size={20} color="#8A5A00" />
-              </View>
-              <View style={styles.setupTextWrap}>
-                <Text style={[styles.setupTitle, { color: isDark ? '#FBBF24' : '#7A4E00' }]}>
-                  Profile backend setup still needed
-                </Text>
-                <Text style={[styles.setupBody, { color: isDark ? '#FCD34D' : '#8A6419' }]}>
-                  Add these `profiles` columns in Supabase to unlock the full latest profile: {missingColumns.join(', ')}.
-                </Text>
-              </View>
-            </View>
-          )}
-
           <View style={styles.statsRow}>
-            <View
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openStatsModal('posts')}
               style={[
                 styles.statCard,
                 {
@@ -807,8 +911,10 @@ export default function ProfileScreen() {
               <MaterialCommunityIcons name="post-outline" size={22} color={theme.primary} />
               <Text style={[styles.statNumber, { color: theme.text }]}>{postsCount}</Text>
               <Text style={[styles.statLabel, { color: theme.textMuted }]}>Posts</Text>
-            </View>
-            <View
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openStatsModal('replies')}
               style={[
                 styles.statCard,
                 {
@@ -820,8 +926,10 @@ export default function ProfileScreen() {
               <MaterialCommunityIcons name="comment-processing-outline" size={22} color={theme.primary} />
               <Text style={[styles.statNumber, { color: theme.text }]}>{commentsCount}</Text>
               <Text style={[styles.statLabel, { color: theme.textMuted }]}>Replies</Text>
-            </View>
-            <View
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openStatsModal('saved')}
               style={[
                 styles.statCard,
                 {
@@ -833,7 +941,7 @@ export default function ProfileScreen() {
               <MaterialCommunityIcons name="bookmark-outline" size={22} color={theme.primary} />
               <Text style={[styles.statNumber, { color: theme.text }]}>{savesCount}</Text>
               <Text style={[styles.statLabel, { color: theme.textMuted }]}>Saved</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           <View
@@ -1050,6 +1158,51 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={statsModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatsModalVisible(false)}
+      >
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface, maxHeight: '76%' }]}>
+            <View style={styles.cardHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text, marginBottom: 0 }]}>{statsModalTitle}</Text>
+              <TouchableOpacity onPress={() => setStatsModalVisible(false)} activeOpacity={0.8}>
+                <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {statsModalLoading ? (
+              <View style={styles.statsModalLoader}>
+                <ActivityIndicator size="small" color={theme.primary} />
+              </View>
+            ) : statsModalItems.length === 0 ? (
+              <Text style={[styles.emptyBody, { color: theme.textMuted }]}>
+                No {statsModalTitle.toLowerCase()} to show yet.
+              </Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.statsModalContent}>
+                {statsModalItems.map((item) => (
+                  <View
+                    key={item.id}
+                    style={[styles.statsModalItem, { borderColor: theme.border, backgroundColor: theme.surfaceSoft }]}
+                  >
+                    <Text style={[styles.statsModalItemTitle, { color: theme.text }]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={[styles.statsModalItemSubtitle, { color: theme.textMuted }]} numberOfLines={2}>
+                      {item.subtitle}
+                    </Text>
+                    <Text style={[styles.statsModalItemMeta, { color: theme.textMuted }]}>{item.meta}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={profileModalVisible} transparent animationType="fade" onRequestClose={() => setProfileModalVisible(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
@@ -1278,6 +1431,34 @@ const styles = StyleSheet.create({
   modalTitle: { color: '#16365F', fontSize: 20, fontWeight: '800', marginBottom: 8 },
   modalHint: { color: '#64748B', fontSize: 13, lineHeight: 19, marginBottom: 14 },
   helperText: { color: '#64748B', fontSize: 12, marginBottom: 8, marginTop: -2 },
+  statsModalLoader: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsModalContent: {
+    gap: 10,
+    paddingTop: 8,
+  },
+  statsModalItem: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  statsModalItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statsModalItemSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  statsModalItemMeta: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   uploadButton: {
     height: 44,
     borderRadius: 14,
