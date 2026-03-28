@@ -8,7 +8,7 @@ import {
     Animated,
     ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { FixedHeader, FilterChips } from '../components/home/HomeHeader';
@@ -84,6 +84,13 @@ const normalizeProfile = (raw: any) => {
     return Array.isArray(related) ? related[0] : related;
 };
 
+const normalizeUsernameFromEmail = (email?: string | null) => {
+    if (!email) return null;
+    const local = email.split('@')[0] ?? '';
+    const sanitized = local.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 40);
+    return sanitized || null;
+};
+
 const mapPost = (row: any): FeedPost => {
     const profile = normalizeProfile(row);
     const content = `${row?.content ?? ''}`.trim();
@@ -134,6 +141,13 @@ const HomeScreen = () => {
         loadPosts();
     }, []);
 
+    useFocusEffect(
+        useCallback(() => {
+            loadCurrentUser();
+            loadPosts();
+        }, []),
+    );
+
     useEffect(() => {
         const animation = Animated.loop(
             Animated.sequence([
@@ -174,6 +188,37 @@ const HomeScreen = () => {
             data: { user },
         } = await supabase.auth.getUser();
         if (!user) return;
+
+        const email = (user.email ?? '').toLowerCase();
+        const metadata = user.user_metadata ?? {};
+        const upsertCandidates = [
+            {
+                id: user.id,
+                email: email || null,
+                full_name: metadata.full_name ?? metadata.name ?? null,
+                username:
+                    normalizeUsernameFromEmail(email) ??
+                    `student_${String(user.id).replace(/-/g, '').slice(0, 8)}`,
+                avatar_url: metadata.avatar_url ?? metadata.picture ?? null,
+            },
+            {
+                id: user.id,
+                email: email || null,
+                full_name: metadata.full_name ?? metadata.name ?? null,
+                username:
+                    normalizeUsernameFromEmail(email) ??
+                    `student_${String(user.id).replace(/-/g, '').slice(0, 8)}`,
+            },
+            {
+                id: user.id,
+                email: email || null,
+            },
+        ];
+
+        for (const payload of upsertCandidates) {
+            const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
+            if (!error) break;
+        }
 
         const selectVariants = [
             'id, full_name, username, avatar_url, branch, year_of_study',
@@ -294,11 +339,27 @@ const HomeScreen = () => {
     };
 
     const handleAddComment = async (postId: string, text: string) => {
-        if (!currentUser) return null;
+        let actor = currentUser;
+        if (!actor?.id) {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+            if (!user) return null;
+            actor = {
+                id: user.id,
+                full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
+                username: normalizeUsernameFromEmail(user.email) ?? null,
+                avatar_url:
+                    (user.user_metadata?.avatar_url as string | undefined) ??
+                    (user.user_metadata?.picture as string | undefined) ??
+                    null,
+            };
+            setCurrentUser(actor);
+        }
 
         const insertPayload = {
             post_id: postId,
-            user_id: currentUser.id,
+            user_id: actor.id,
             content: text,
         };
 
@@ -315,8 +376,8 @@ const HomeScreen = () => {
 
         const comment: FeedComment = {
             id: inserted.id,
-            userName: currentUser.full_name ?? currentUser.username ?? 'You',
-            avatar: currentUser.avatar_url ?? FALLBACK_AVATAR,
+            userName: actor.full_name ?? actor.username ?? 'You',
+            avatar: actor.avatar_url ?? FALLBACK_AVATAR,
             text: inserted.content ?? text,
             time: formatTimeAgo(inserted.created_at),
         };
@@ -459,7 +520,23 @@ const HomeScreen = () => {
 
     const handleSave = useCallback(
         async (id: string) => {
-            if (!currentUser?.id) return;
+            let activeUser = currentUser;
+            if (!activeUser?.id) {
+                const {
+                    data: { user },
+                } = await supabase.auth.getUser();
+                if (!user) return;
+                activeUser = {
+                    id: user.id,
+                    full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
+                    username: normalizeUsernameFromEmail(user.email) ?? null,
+                    avatar_url:
+                        (user.user_metadata?.avatar_url as string | undefined) ??
+                        (user.user_metadata?.picture as string | undefined) ??
+                        null,
+                };
+                setCurrentUser(activeUser);
+            }
 
             const wasSaved = savedPosts.has(id);
             setSavedPosts((prev) => {
@@ -476,7 +553,7 @@ const HomeScreen = () => {
                 const { error } = await supabase
                     .from('saves')
                     .delete()
-                    .eq('user_id', currentUser.id)
+                    .eq('user_id', activeUser.id)
                     .eq('post_id', id);
 
                 if (error) {
@@ -487,9 +564,9 @@ const HomeScreen = () => {
             }
 
             const { error } = await supabase
-                .from('saves')
-                .insert({
-                    user_id: currentUser.id,
+                    .from('saves')
+                    .insert({
+                    user_id: activeUser.id,
                     post_id: id,
                 });
 

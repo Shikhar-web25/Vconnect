@@ -66,7 +66,6 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
         <>
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Main" component={BottomTabNavigator} />
           <Stack.Screen
             name="Signup"
             component={SignupScreen}

@@ -149,6 +149,14 @@ const DmsScreen = () => {
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
   const isInstitutionalEmail = (value: string) => normalizeEmail(value).endsWith(VIT_EMAIL_SUFFIX);
+  const handleNewDmEmailChange = useCallback((text: string) => {
+    if (text.includes('@')) {
+      const local = text.split('@')[0].trim();
+      setNewDmEmail(local ? `${local}${VIT_EMAIL_SUFFIX}` : '');
+      return;
+    }
+    setNewDmEmail(text);
+  }, []);
 
   const loadChats = useCallback(
     async (showLoader = true, userIdOverride?: string) => {
@@ -221,10 +229,13 @@ const DmsScreen = () => {
 
       if (!withBio.error) {
         profiles = withBio.data as any[] | null;
-      } else if (`${withBio.error.message ?? ''}`.toLowerCase().includes('bio')) {
+      } else if (
+        `${withBio.error.message ?? ''}`.toLowerCase().includes('bio') ||
+        `${withBio.error.message ?? ''}`.toLowerCase().includes('year_of_study')
+      ) {
         const fallback = await supabase
           .from('profiles')
-          .select('id, full_name, username, avatar_url, year_of_study')
+          .select('id, full_name, username, avatar_url')
           .in('id', otherIds);
         profiles = fallback.data as any[] | null;
       }
@@ -431,10 +442,13 @@ const DmsScreen = () => {
     if (!withBio.error) {
       data = withBio.data;
       error = null;
-    } else if (`${withBio.error.message ?? ''}`.toLowerCase().includes('bio')) {
+    } else if (
+      `${withBio.error.message ?? ''}`.toLowerCase().includes('bio') ||
+      `${withBio.error.message ?? ''}`.toLowerCase().includes('year_of_study')
+    ) {
       const fallback = await supabase
         .from('profiles')
-        .select('id, full_name, username, avatar_url, year_of_study, email')
+        .select('id, full_name, username, avatar_url, email')
         .eq('email', email)
         .limit(1)
         .maybeSingle();
@@ -622,7 +636,7 @@ const DmsScreen = () => {
                 <TextInput
                   style={styles.newDmInput}
                   value={newDmEmail}
-                  onChangeText={setNewDmEmail}
+                  onChangeText={handleNewDmEmailChange}
                   placeholder={`student${VIT_EMAIL_SUFFIX}`}
                   placeholderTextColor="#94A3B8"
                   autoCapitalize="none"

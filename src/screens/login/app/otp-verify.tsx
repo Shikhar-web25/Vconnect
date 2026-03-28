@@ -163,7 +163,6 @@ const OtpVerifyScreen = () => {
     }
 
     setVerifying(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
   const resendCode = async () => {
