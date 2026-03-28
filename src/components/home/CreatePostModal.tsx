@@ -14,6 +14,7 @@ import {
     Animated,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useAppTheme } from '../../theme/AppThemeContext';
 
 const DEEP = '#1E1B4B';
 const ACCENT = '#5B6AF0';
@@ -42,6 +43,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
     onClose,
     onSubmit,
 }) => {
+    const { theme, isDark } = useAppTheme();
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
@@ -85,28 +87,28 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 style={styles.container}
             >
                 <TouchableWithoutFeedback onPress={handleClose}>
-                    <View style={styles.backdrop} />
+                    <View style={[styles.backdrop, { backgroundColor: theme.modalBackdrop }]} />
                 </TouchableWithoutFeedback>
 
-                <View style={styles.modalContent}>
+                <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
                     {/* Header */}
-                    <View style={styles.header}>
-                        <View style={styles.handleBar} />
+                    <View style={[styles.header, { borderBottomColor: theme.border }]}>
+                        <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
                         <View style={styles.headerRow}>
                             <TouchableOpacity
                                 onPress={step === 1 ? handleClose : () => setStep(1)}
-                                style={styles.headerBtn}
+                                style={[styles.headerBtn, { backgroundColor: theme.surfaceSoft }]}
                             >
                                 <Ionicons
                                     name={step === 1 ? 'close' : 'arrow-back'}
                                     size={24}
-                                    color={TEXT_DARK}
+                                    color={theme.text}
                                 />
                             </TouchableOpacity>
-                            <Text style={styles.headerTitle}>
+                            <Text style={[styles.headerTitle, { color: theme.text }]}>
                                 {step === 1 ? 'Choose Topic' : 'Create Post'}
                             </Text>
-                            <View style={styles.headerBtn} />
+                            <View style={[styles.headerBtn, { backgroundColor: 'transparent' }]} />
                         </View>
                         
                         {/* Progress indicator */}
@@ -130,7 +132,12 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
                                         key={cat.id}
                                         style={[
                                             styles.categoryCard,
+                                            { backgroundColor: theme.surfaceSoft },
                                             selectedCategory === cat.name && styles.categoryCardSelected,
+                                            selectedCategory === cat.name && {
+                                                borderColor: theme.primary,
+                                                backgroundColor: isDark ? '#1D2A3F' : '#F0F4FF',
+                                            },
                                         ]}
                                         onPress={() => setSelectedCategory(cat.name)}
                                         activeOpacity={0.7}
@@ -147,7 +154,9 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
                                         <Text
                                             style={[
                                                 styles.categoryText,
+                                                { color: theme.text },
                                                 selectedCategory === cat.name && styles.categoryTextSelected,
+                                                selectedCategory === cat.name && { color: theme.primary },
                                             ]}
                                         >
                                             {cat.name}
@@ -163,39 +172,39 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         ) : (
                             /* Post Form */
                             <View style={styles.formContainer}>
-                                <View style={styles.selectedCategoryBadge}>
-                                    <Ionicons name="bookmark" size={14} color={ACCENT} />
-                                    <Text style={styles.selectedCategoryText}>{selectedCategory}</Text>
+                                <View style={[styles.selectedCategoryBadge, { backgroundColor: theme.surfaceSoft }]}>
+                                    <Ionicons name="bookmark" size={14} color={theme.primary} />
+                                    <Text style={[styles.selectedCategoryText, { color: theme.primary }]}>{selectedCategory}</Text>
                                 </View>
 
-                                <Text style={styles.label}>Question Title</Text>
+                                <Text style={[styles.label, { color: theme.text }]}>Question Title</Text>
                                 <TextInput
-                                    style={styles.titleInput}
+                                    style={[styles.titleInput, { backgroundColor: theme.surfaceSoft, borderColor: theme.border, color: theme.text }]}
                                     placeholder="What would you like to ask?"
-                                    placeholderTextColor={TEXT_MUTED}
+                                    placeholderTextColor={theme.textMuted}
                                     value={title}
                                     onChangeText={setTitle}
                                     multiline
                                     maxLength={150}
                                 />
-                                <Text style={styles.charCount}>{title.length}/150</Text>
+                                <Text style={[styles.charCount, { color: theme.textMuted }]}>{title.length}/150</Text>
 
-                                <Text style={styles.label}>Description</Text>
+                                <Text style={[styles.label, { color: theme.text }]}>Description</Text>
                                 <TextInput
-                                    style={styles.contentInput}
+                                    style={[styles.contentInput, { backgroundColor: theme.surfaceSoft, borderColor: theme.border, color: theme.text }]}
                                     placeholder="Provide more details about your question..."
-                                    placeholderTextColor={TEXT_MUTED}
+                                    placeholderTextColor={theme.textMuted}
                                     value={content}
                                     onChangeText={setContent}
                                     multiline
                                     textAlignVertical="top"
                                     maxLength={1000}
                                 />
-                                <Text style={styles.charCount}>{content.length}/1000</Text>
+                                <Text style={[styles.charCount, { color: theme.textMuted }]}>{content.length}/1000</Text>
 
-                                <View style={styles.tips}>
+                                <View style={[styles.tips, { backgroundColor: isDark ? '#2F2410' : '#FFFBEB' }]}>
                                     <Ionicons name="bulb" size={18} color="#F59E0B" />
-                                    <Text style={styles.tipsText}>
+                                    <Text style={[styles.tipsText, { color: isDark ? '#FCD34D' : '#92400E' }]}>
                                         Tip: Be specific and clear to get better answers!
                                     </Text>
                                 </View>
@@ -204,9 +213,13 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     </ScrollView>
 
                     {/* Footer Button */}
-                    <View style={styles.footer}>
+                    <View style={[styles.footer, { borderTopColor: theme.border }]}>
                         <TouchableOpacity
-                            style={[styles.submitBtn, !canProceed && styles.submitBtnDisabled]}
+                            style={[
+                                styles.submitBtn,
+                                { backgroundColor: theme.primary, shadowColor: theme.primary },
+                                !canProceed && [styles.submitBtnDisabled, { backgroundColor: theme.border }],
+                            ]}
                             onPress={step === 1 ? () => setStep(2) : handleSubmit}
                             disabled={!canProceed}
                             activeOpacity={0.8}

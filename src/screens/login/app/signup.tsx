@@ -638,7 +638,6 @@ const SignUpScreen: React.FC = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpSignUpLoading, setOtpSignUpLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
@@ -830,8 +829,16 @@ const SignUpScreen: React.FC = () => {
 
     setLoading(true);
 
+    const email = getFullEmail().toLowerCase();
+    if (!email.endsWith(VIT_DOMAIN)) {
+      setLoading(false);
+      Alert.alert("Invalid email", "Only VIT Bhopal institutional emails are allowed.");
+      triggerShake();
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
-      email: getFullEmail(),
+      email,
       password,
       options: {
         data: {
@@ -852,67 +859,8 @@ const SignUpScreen: React.FC = () => {
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 2500);
 
-    Alert.alert("Success", "Account created successfully! 🎉", [
-      {
-        text: "Continue",
-        onPress: () =>
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Main" }],
-          }),
-      },
-    ]);
-  };
-
-  const handleSignUpWithOtp = async () => {
-    setNameError("");
-    setRegNoError("");
-
-    let hasError = false;
-    if (!name.trim() || name.trim().length < 2) {
-      setNameError("Name must be at least 2 characters");
-      hasError = true;
-    }
-
-    if (!regNo.trim() || regNo.trim().length < 5) {
-      setRegNoError("Registration number must be at least 5 characters");
-      hasError = true;
-    }
-
-    if (!hasAcceptedTerms) {
-      Alert.alert("Terms Required", "Please read and accept the Terms & Conditions to continue.");
-      hasError = true;
-    }
-
-    if (hasError) {
-      triggerShake();
-      return;
-    }
-
-    const email = getFullEmail().toLowerCase();
-    if (!email.endsWith(VIT_DOMAIN)) {
-      Alert.alert("Invalid email", "Only VIT Bhopal institutional emails are allowed.");
-      triggerShake();
-      return;
-    }
-
-    setOtpSignUpLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        data: {
-          full_name: name.trim(),
-          registration_number: regNo.trim().toUpperCase(),
-        },
-      },
-    });
-    setOtpSignUpLoading(false);
-
-    if (error) {
-      Alert.alert("OTP error", error.message);
-      triggerShake();
-      return;
+    if (!data.user) {
+      Alert.alert("Signup initiated", "Check your email for OTP verification.");
     }
 
     navigation.navigate("OtpVerify", {
@@ -1086,18 +1034,6 @@ const SignUpScreen: React.FC = () => {
                 disabled={completedFields < 4 || !hasAcceptedTerms}
               />
             </Animated.View>
-
-            <View style={styles.otpSignupWrap}>
-              <AuthButton
-                title="Sign Up with OTP"
-                onPress={handleSignUpWithOtp}
-                loading={otpSignUpLoading}
-                disabled={!isNameValid || !isRegNoValid || !hasAcceptedTerms}
-                variant="secondary"
-                style={styles.otpSignupButton}
-                textStyle={styles.otpSignupButtonText}
-              />
-            </View>
 
             <View style={styles.termsContainer}>
               <TouchableOpacity
@@ -1322,21 +1258,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     top: SCREEN_HEIGHT * 0.3,
-  },
-  otpSignupWrap: {
-    marginTop: 10,
-  },
-  otpSignupButton: {
-    height: 50,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#BFDBFE",
-    backgroundColor: "#EEF2FF",
-  },
-  otpSignupButtonText: {
-    color: "#1D4ED8",
-    fontSize: 14,
-    fontWeight: "700",
   },
   loginContainer: { flexDirection: "row", justifyContent: "center", marginTop: 18 },
   loginText: { fontSize: 14, color: "#64748B" },

@@ -490,8 +490,8 @@ const DmsScreen = () => {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.headerCard}>
           <View>
-            <Text style={styles.headerTitle}>Messages</Text>
-            <Text style={styles.headerSub}>{filteredChats.length} CONVERSATIONS</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Messages</Text>
+            <Text style={[styles.headerSub, { color: theme.textMuted }]}>{filteredChats.length} CONVERSATIONS</Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity

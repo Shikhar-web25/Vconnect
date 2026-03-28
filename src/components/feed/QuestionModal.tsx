@@ -17,6 +17,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from '@react-native-community/blur';
 import { getMaleAvatar } from '../../utils/avatar';
+import { useAppTheme } from '../../theme/AppThemeContext';
 
 const ACCENT = '#5B6AF0';
 const TEXT_DARK = '#1A1A2E';
@@ -46,6 +47,7 @@ interface QuestionModalProps {
 }
 
 const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, onAddComment, onClose }) => {
+    const { theme, isDark } = useAppTheme();
     const [newComment, setNewComment] = useState('');
     const [localComments, setLocalComments] = useState<Comment[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,54 +110,54 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, on
                 style={styles.keyboardView}
                 keyboardVerticalOffset={0}
             >
-                <View style={styles.modalOverlay}>
+                <View style={[styles.modalOverlay, { backgroundColor: theme.modalBackdrop }]}>
                     <TouchableWithoutFeedback onPress={onClose}>
                         <View style={styles.modalBackdrop}>
                             <BlurView
                                 style={styles.absolute}
-                                blurType="light"
+                                blurType={isDark ? 'dark' : 'light'}
                                 blurAmount={10}
-                                reducedTransparencyFallbackColor="white"
+                                reducedTransparencyFallbackColor={theme.background}
                             />
                         </View>
                     </TouchableWithoutFeedback>
 
                     <View style={styles.modalContentWrapper}>
-                        <View style={styles.modalContent}>
+                        <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
                             <View style={styles.modalHeader}>
                                 <View style={styles.userInfo}>
                                     <View style={styles.avatarRing}>
                                         <Image source={data.userAvatar} style={styles.avatarSmall} />
                                     </View>
                                     <View>
-                                        <Text style={styles.userName}>{data.userName}</Text>
-                                        <Text style={styles.postMeta}>{data.category}</Text>
+                                        <Text style={[styles.userName, { color: theme.text }]}>{data.userName}</Text>
+                                        <Text style={[styles.postMeta, { color: theme.textMuted }]}>{data.category}</Text>
                                     </View>
                                 </View>
-                                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                    <Ionicons name="close" size={24} color={TEXT_MUTED} />
+                                <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: theme.surfaceSoft }]}>
+                                    <Ionicons name="close" size={24} color={theme.textMuted} />
                                 </TouchableOpacity>
                             </View>
 
                             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                                <Text style={styles.modalTitle}>{data.questionTitle}</Text>
-                                <View style={styles.divider} />
+                                <Text style={[styles.modalTitle, { color: theme.text }]}>{data.questionTitle}</Text>
+                                <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-                                <Text style={styles.sectionTitle}>Answer</Text>
-                                <Text style={styles.modalBody}>{data.fullAnswer}</Text>
+                                <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>Answer</Text>
+                                <Text style={[styles.modalBody, { color: theme.text }]}>{data.fullAnswer}</Text>
 
-                                <View style={styles.divider} />
-                                <Text style={styles.sectionTitle}>Comments ({localComments.length})</Text>
+                                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                                <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>Comments ({localComments.length})</Text>
                                 <View style={styles.commentsList}>
                                     {localComments.map((comment) => (
                                         <View key={comment.id} style={styles.commentItem}>
                                             <Image source={{ uri: comment.avatar }} style={styles.commentAvatar} />
-                                            <View style={styles.commentContent}>
+                                            <View style={[styles.commentContent, { backgroundColor: theme.surfaceSoft }]}>
                                                 <View style={styles.commentHeader}>
-                                                    <Text style={styles.commentName}>{comment.userName}</Text>
-                                                    <Text style={styles.commentTime}>{comment.time}</Text>
+                                                    <Text style={[styles.commentName, { color: theme.text }]}>{comment.userName}</Text>
+                                                    <Text style={[styles.commentTime, { color: theme.textMuted }]}>{comment.time}</Text>
                                                 </View>
-                                                <Text style={styles.commentText}>{comment.text}</Text>
+                                                <Text style={[styles.commentText, { color: theme.text }]}>{comment.text}</Text>
                                             </View>
                                         </View>
                                     ))}
@@ -164,11 +166,11 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ visible, data, postId, on
                                 <View style={{ height: 20 }} />
                             </ScrollView>
 
-                            <View style={styles.inputContainer}>
+                            <View style={[styles.inputContainer, { borderTopColor: theme.border }]}>
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { backgroundColor: theme.surfaceSoft, color: theme.text }]}
                                     placeholder="Write a comment..."
-                                    placeholderTextColor={TEXT_MUTED}
+                                    placeholderTextColor={theme.textMuted}
                                     value={newComment}
                                     onChangeText={setNewComment}
                                 />

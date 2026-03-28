@@ -29,6 +29,18 @@ const normalizeUsernameFromEmail = (email?: string | null) => {
   return sanitized || null;
 };
 
+const extractRegistrationNumberFromEmail = (email?: string | null) => {
+  if (!email) return null;
+  const local = (email.split('@')[0] ?? '').toLowerCase();
+  const pattern = local.match(/[0-9]{2}[a-z]{3}[0-9]{5}/i);
+  if (pattern?.[0]) return pattern[0].toUpperCase();
+  const segments = local.split('.');
+  if (segments.length > 1) {
+    return segments[segments.length - 1].replace(/[^a-z0-9]/gi, '').toUpperCase() || null;
+  }
+  return null;
+};
+
 const OtpVerifyScreen = () => {
   const navigation = useNavigation<OtpNav>();
   const route = useRoute<OtpRoute>();
@@ -62,18 +74,48 @@ const OtpVerifyScreen = () => {
       throw new Error('Only VIT Bhopal emails are allowed.');
     }
 
-    const profilePayload = {
+    const profilePayload: Record<string, any> = {
       id: user.id,
       email: normalizedEmail,
       full_name: fullName?.trim() || (user.user_metadata?.full_name as string | undefined) || null,
       username:
         normalizeUsernameFromEmail(normalizedEmail) ??
         `student_${user.id.replace(/-/g, '').slice(0, 8)}`,
+      registration_number:
+        regNo?.trim().toUpperCase() ||
+        (user.user_metadata?.registration_number as string | undefined)?.toUpperCase() ||
+        extractRegistrationNumberFromEmail(normalizedEmail),
+      avatar_url:
+        (user.user_metadata?.avatar_url as string | undefined) ||
+        (user.user_metadata?.picture as string | undefined) ||
+        null,
     };
 
-    const { error: upsertError } = await supabase
-      .from('profiles')
-      .upsert(profilePayload, { onConflict: 'id' });
+    const candidates = [
+      { ...profilePayload },
+      (() => {
+        const clone = { ...profilePayload };
+        delete clone.registration_number;
+        return clone;
+      })(),
+      (() => {
+        const clone = { ...profilePayload };
+        delete clone.registration_number;
+        delete clone.avatar_url;
+        return clone;
+      })(),
+      { id: user.id, email: normalizedEmail },
+    ];
+
+    let upsertError: any = null;
+    for (const payload of candidates) {
+      const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
+      if (!error) {
+        upsertError = null;
+        break;
+      }
+      upsertError = error;
+    }
 
     if (upsertError) {
       throw new Error(upsertError.message);
@@ -92,7 +134,7 @@ const OtpVerifyScreen = () => {
     const { error } = await supabase.auth.verifyOtp({
       email: email.toLowerCase(),
       token: otp,
-      type: 'email',
+      type: mode === 'signup' ? 'signup' : 'email',
     });
 
     if (error) {
@@ -128,19 +170,20 @@ const OtpVerifyScreen = () => {
     setErrorMessage(null);
     setResending(true);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.toLowerCase(),
-      options: {
-        shouldCreateUser: mode === 'signup',
-        data:
-          mode === 'signup'
-            ? {
-                full_name: fullName?.trim(),
-                registration_number: regNo?.trim().toUpperCase(),
-              }
-            : undefined,
-      },
-    });
+    const resendResult =
+      mode === 'signup'
+        ? await supabase.auth.resend({
+            type: 'signup',
+            email: email.toLowerCase(),
+          })
+        : await supabase.auth.signInWithOtp({
+            email: email.toLowerCase(),
+            options: {
+              shouldCreateUser: false,
+            },
+          });
+
+    const error = resendResult.error;
 
     setResending(false);
     if (error) {

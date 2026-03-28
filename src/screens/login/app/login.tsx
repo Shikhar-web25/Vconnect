@@ -29,6 +29,72 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const DOMAIN_TEXT = "vitbhopal.ac.in";
 const VIT_DOMAIN = "@vitbhopal.ac.in";
 
+const normalizeUsernameFromEmail = (email?: string | null) => {
+  if (!email) return null;
+  const local = email.split("@")[0] ?? "";
+  const sanitized = local.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 40);
+  return sanitized || null;
+};
+
+const extractRegistrationNumberFromEmail = (email?: string | null) => {
+  if (!email) return null;
+  const local = (email.split("@")[0] ?? "").toLowerCase();
+  const pattern = local.match(/[0-9]{2}[a-z]{3}[0-9]{5}/i);
+  if (pattern?.[0]) return pattern[0].toUpperCase();
+  const segments = local.split(".");
+  if (segments.length > 1) {
+    return segments[segments.length - 1].replace(/[^a-z0-9]/gi, "").toUpperCase() || null;
+  }
+  return null;
+};
+
+const upsertProfileFromAuthUser = async (user: any) => {
+  if (!user?.id) return;
+
+  const normalizedEmail = (user.email ?? "").toLowerCase();
+  const metadata = user.user_metadata ?? {};
+  const basePayload: Record<string, any> = {
+    id: user.id,
+    email: normalizedEmail || null,
+    full_name: metadata.full_name ?? metadata.name ?? null,
+    username:
+      normalizeUsernameFromEmail(normalizedEmail) ??
+      `student_${String(user.id).replace(/-/g, "").slice(0, 8)}`,
+    registration_number:
+      extractRegistrationNumberFromEmail(normalizedEmail) ??
+      extractRegistrationNumberFromEmail(metadata.email) ??
+      null,
+    avatar_url: metadata.avatar_url ?? metadata.picture ?? null,
+  };
+
+  const candidates: Array<Record<string, any>> = [
+    { ...basePayload },
+    (() => {
+      const clone = { ...basePayload };
+      delete clone.registration_number;
+      return clone;
+    })(),
+    (() => {
+      const clone = { ...basePayload };
+      delete clone.registration_number;
+      delete clone.avatar_url;
+      return clone;
+    })(),
+    { id: user.id, email: normalizedEmail || null },
+  ];
+
+  let lastError: any = null;
+  for (const payload of candidates) {
+    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+    if (!error) return;
+    lastError = error;
+  }
+
+  if (lastError) {
+    throw new Error(lastError.message);
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Floating Background Particle
 // ---------------------------------------------------------------------------
@@ -397,7 +463,6 @@ const LoginScreen = () => {
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -551,6 +616,14 @@ const LoginScreen = () => {
       return;
     }
 
+    try {
+      await upsertProfileFromAuthUser(data.user);
+    } catch (profileError: any) {
+      setError(profileError?.message ?? "Could not sync your profile.");
+      shake();
+      return;
+    }
+
     setSuccessMsg("Login successful");
 
     setTimeout(() => {
@@ -649,6 +722,19 @@ const LoginScreen = () => {
       return;
     }
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    try {
+      await upsertProfileFromAuthUser(user);
+    } catch (profileError: any) {
+      setError(profileError?.message ?? "Could not sync your profile.");
+      shake();
+      setLoading(false);
+      return;
+    }
+
     setSuccessMsg("Login successful");
 
     setTimeout(() => {
@@ -656,45 +742,6 @@ const LoginScreen = () => {
     }, 600);
 
     setLoading(false);
-  };
-
-  const handleOtpLogin = async () => {
-    if (!username.trim()) {
-      setError("Enter your institutional username first");
-      shake();
-      return;
-    }
-
-    const email = getFullEmail().toLowerCase();
-    if (!email.endsWith(VIT_DOMAIN)) {
-      setError("Only VIT Bhopal emails allowed");
-      shake();
-      return;
-    }
-
-    setOtpLoading(true);
-    setError(null);
-    setSuccessMsg(null);
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-      },
-    });
-
-    setOtpLoading(false);
-    if (error) {
-      setError(error.message);
-      shake();
-      return;
-    }
-
-    setSuccessMsg("OTP sent to your email");
-    navigation.navigate("OtpVerify", {
-      email,
-      mode: "login",
-    });
   };
 
   const handleUsernameChange = (text: string) => {
@@ -848,18 +895,6 @@ const LoginScreen = () => {
                 disabled={!canSignIn}
               />
             </Animated.View>
-
-            <View style={{ marginTop: 12 }}>
-              <AuthButton
-                title="Sign In with OTP"
-                onPress={handleOtpLogin}
-                loading={otpLoading}
-                disabled={!username.trim()}
-                variant="secondary"
-                style={styles.otpButton}
-                textStyle={styles.otpButtonText}
-              />
-            </View>
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
@@ -1078,19 +1113,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
   },
-  otpButton: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.45)",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  otpButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-
   divider: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '../../supabaseClient';
 import { isAdminEmail } from '../constants/admin';
@@ -146,7 +146,7 @@ const normalizeCloudinaryDeliveryType = (value?: string | null): CloudinaryDeliv
 };
 
 export default function ProfileScreen() {
-  const { theme, isDark, mode, toggleMode } = useAppTheme();
+  const { theme, isDark, toggleMode } = useAppTheme();
   const navigation = useNavigation<any>();
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
@@ -177,10 +177,7 @@ export default function ProfileScreen() {
   const [draftResumeResourceType, setDraftResumeResourceType] = useState<CloudinaryResourceType>('raw');
   const [draftResumeDeliveryType, setDraftResumeDeliveryType] = useState<CloudinaryDeliveryType>('private');
   const skeletonPulse = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    loadProfile(true);
-  }, []);
+  const themeToggleAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -201,6 +198,14 @@ export default function ProfileScreen() {
     return () => animation.stop();
   }, [skeletonPulse]);
 
+  useEffect(() => {
+    Animated.timing(themeToggleAnim, {
+      toValue: isDark ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [isDark, themeToggleAnim]);
+
   const hasColumn = (column: string) => profileColumns.includes(column);
 
   const alertMissingColumns = (columns: string[]) => {
@@ -210,7 +215,7 @@ export default function ProfileScreen() {
     );
   };
 
-  const loadProfile = async (showLoader = false) => {
+  const loadProfile = useCallback(async (showLoader = false) => {
     if (showLoader) {
       setLoading(true);
     } else {
@@ -259,7 +264,44 @@ export default function ProfileScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadProfile(true);
+  }, [loadProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile(false);
+    }, [loadProfile]),
+  );
+
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const channel = supabase
+      .channel(`profile-sync-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'posts', filter: `user_id=eq.${profile.id}` },
+        () => loadProfile(false),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments', filter: `user_id=eq.${profile.id}` },
+        () => loadProfile(false),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'saves', filter: `user_id=eq.${profile.id}` },
+        () => loadProfile(false),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadProfile, profile?.id]);
 
   const openProfileEditor = () => {
     setDraftName(profile?.full_name ?? profile?.username ?? '');
@@ -639,6 +681,14 @@ export default function ProfileScreen() {
   const hasPrivateResumeColumns = missingPrivateResumeColumns.length === 0;
   const recentSkills = profile?.skills ?? [];
   const socialLinks = profile?.social_links ?? [];
+  const toggleThumbTranslate = themeToggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, 24],
+  });
+  const toggleTrackColor = themeToggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#E2E8F0', '#1E3A8A'],
+  });
 
   if (loading) {
     return (
@@ -670,9 +720,18 @@ export default function ProfileScreen() {
               <Text style={styles.heroEyebrow}>Vconnect</Text>
               <Text style={styles.heroTitle}>Profile</Text>
             </View>
-            <TouchableOpacity style={styles.headerAction} onPress={openProfileEditor} activeOpacity={0.85}>
-              <MaterialCommunityIcons name="pencil-outline" size={20} color="#16365F" />
-            </TouchableOpacity>
+            <View style={styles.heroActionsRow}>
+              <TouchableOpacity style={styles.themeHeaderToggle} onPress={toggleMode} activeOpacity={0.9}>
+                <Animated.View style={[styles.themeHeaderTrack, { backgroundColor: toggleTrackColor }]}>
+                  <MaterialCommunityIcons name="white-balance-sunny" size={12} color="#F59E0B" style={styles.themeHeaderIconLeft} />
+                  <MaterialCommunityIcons name="weather-night" size={12} color="#0F172A" style={styles.themeHeaderIconRight} />
+                  <Animated.View style={[styles.themeHeaderThumb, { transform: [{ translateX: toggleThumbTranslate }] }]} />
+                </Animated.View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerAction} onPress={openProfileEditor} activeOpacity={0.85}>
+                <MaterialCommunityIcons name="pencil-outline" size={20} color="#16365F" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.profileHeroCard}>
@@ -707,13 +766,28 @@ export default function ProfileScreen() {
 
         <View style={styles.contentSection}>
           {missingColumns.length > 0 && (
-            <View style={styles.setupCard}>
-              <View style={styles.setupIconWrap}>
+            <View
+              style={[
+                styles.setupCard,
+                {
+                  backgroundColor: isDark ? '#2F2410' : '#FFF8E8',
+                  borderColor: isDark ? '#4B3B1A' : '#F2D59C',
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.setupIconWrap,
+                  { backgroundColor: isDark ? '#4B3B1A' : '#FFE8B1' },
+                ]}
+              >
                 <MaterialCommunityIcons name="database-cog-outline" size={20} color="#8A5A00" />
               </View>
               <View style={styles.setupTextWrap}>
-                <Text style={styles.setupTitle}>Profile backend setup still needed</Text>
-                <Text style={styles.setupBody}>
+                <Text style={[styles.setupTitle, { color: isDark ? '#FBBF24' : '#7A4E00' }]}>
+                  Profile backend setup still needed
+                </Text>
+                <Text style={[styles.setupBody, { color: isDark ? '#FCD34D' : '#8A6419' }]}>
                   Add these `profiles` columns in Supabase to unlock the full latest profile: {missingColumns.join(', ')}.
                 </Text>
               </View>
@@ -721,87 +795,135 @@ export default function ProfileScreen() {
           )}
 
           <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <MaterialCommunityIcons name="post-outline" size={22} color="#16365F" />
-              <Text style={styles.statNumber}>{postsCount}</Text>
-              <Text style={styles.statLabel}>Posts</Text>
+            <View
+              style={[
+                styles.statCard,
+                {
+                  backgroundColor: theme.surface,
+                  shadowColor: isDark ? '#000000' : '#16365F',
+                },
+              ]}
+            >
+              <MaterialCommunityIcons name="post-outline" size={22} color={theme.primary} />
+              <Text style={[styles.statNumber, { color: theme.text }]}>{postsCount}</Text>
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Posts</Text>
             </View>
-            <View style={styles.statCard}>
-              <MaterialCommunityIcons name="comment-processing-outline" size={22} color="#16365F" />
-              <Text style={styles.statNumber}>{commentsCount}</Text>
-              <Text style={styles.statLabel}>Replies</Text>
+            <View
+              style={[
+                styles.statCard,
+                {
+                  backgroundColor: theme.surface,
+                  shadowColor: isDark ? '#000000' : '#16365F',
+                },
+              ]}
+            >
+              <MaterialCommunityIcons name="comment-processing-outline" size={22} color={theme.primary} />
+              <Text style={[styles.statNumber, { color: theme.text }]}>{commentsCount}</Text>
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Replies</Text>
             </View>
-            <View style={styles.statCard}>
-              <MaterialCommunityIcons name="bookmark-outline" size={22} color="#16365F" />
-              <Text style={styles.statNumber}>{savesCount}</Text>
-              <Text style={styles.statLabel}>Saved</Text>
+            <View
+              style={[
+                styles.statCard,
+                {
+                  backgroundColor: theme.surface,
+                  shadowColor: isDark ? '#000000' : '#16365F',
+                },
+              ]}
+            >
+              <MaterialCommunityIcons name="bookmark-outline" size={22} color={theme.primary} />
+              <Text style={[styles.statNumber, { color: theme.text }]}>{savesCount}</Text>
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Saved</Text>
             </View>
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.surface,
+                shadowColor: isDark ? '#000000' : '#16365F',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>About</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>About</Text>
               <TouchableOpacity onPress={openProfileEditor} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="pencil" size={18} color="#64748B" />
+                <MaterialCommunityIcons name="pencil" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.cardBody}>
+            <Text style={[styles.cardBody, { color: theme.textMuted }]}>
               {profile?.bio?.trim() || 'Add a short bio so other students know what you are building, learning, or looking for.'}
             </Text>
             <View style={styles.metaRow}>
-              <View style={styles.metaPill}>
-                <MaterialCommunityIcons name="source-branch" size={16} color="#0F5B88" />
-                <Text style={styles.metaPillText}>{profile?.branch || 'Branch not set'}</Text>
+              <View style={[styles.metaPill, { backgroundColor: theme.surfaceSoft }]}>
+                <MaterialCommunityIcons name="source-branch" size={16} color={theme.primary} />
+                <Text style={[styles.metaPillText, { color: theme.primary }]}>{profile?.branch || 'Branch not set'}</Text>
               </View>
-              <View style={styles.metaPill}>
-                <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#0F5B88" />
-                <Text style={styles.metaPillText}>{formatYearLabel(profile?.year_of_study)}</Text>
+              <View style={[styles.metaPill, { backgroundColor: theme.surfaceSoft }]}>
+                <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.primary} />
+                <Text style={[styles.metaPillText, { color: theme.primary }]}>{formatYearLabel(profile?.year_of_study)}</Text>
               </View>
-              <View style={styles.metaPill}>
-                <MaterialCommunityIcons name="clock-outline" size={16} color="#0F5B88" />
-                <Text style={styles.metaPillText}>Joined {formatJoinedDate(profile?.created_at)}</Text>
+              <View style={[styles.metaPill, { backgroundColor: theme.surfaceSoft }]}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color={theme.primary} />
+                <Text style={[styles.metaPillText, { color: theme.primary }]}>Joined {formatJoinedDate(profile?.created_at)}</Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.surface,
+                shadowColor: isDark ? '#000000' : '#16365F',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Skills</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Skills</Text>
               <TouchableOpacity onPress={openSkillsEditor} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="pencil" size={18} color="#64748B" />
+                <MaterialCommunityIcons name="pencil" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
             {hasColumn('skills') ? (
               recentSkills.length > 0 ? (
                 <View style={styles.tagWrap}>
                   {recentSkills.map((skill) => (
-                    <View key={skill} style={styles.tagChip}>
-                      <Text style={styles.tagText}>{skill}</Text>
+                    <View key={skill} style={[styles.tagChip, { backgroundColor: theme.surfaceSoft, borderColor: theme.border }]}>
+                      <Text style={[styles.tagText, { color: theme.text }]}>{skill}</Text>
                     </View>
                   ))}
                 </View>
               ) : (
-                <Text style={styles.emptyBody}>Add skills that help students understand your strengths.</Text>
+                <Text style={[styles.emptyBody, { color: theme.textMuted }]}>Add skills that help students understand your strengths.</Text>
               )
             ) : (
-              <Text style={styles.emptyBody}>This section is wired in the app, but your `profiles.skills` column is not created yet.</Text>
+              <Text style={[styles.emptyBody, { color: theme.textMuted }]}>This section is wired in the app, but your `profiles.skills` column is not created yet.</Text>
             )}
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.surface,
+                shadowColor: isDark ? '#000000' : '#16365F',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Resume</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Resume</Text>
               <TouchableOpacity onPress={openResumeEditor} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="pencil" size={18} color="#64748B" />
+                <MaterialCommunityIcons name="pencil" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
             <View style={styles.assetRow}>
-              <View style={styles.assetIconWrap}>
-                <MaterialCommunityIcons name="file-document-outline" size={26} color="#16365F" />
+              <View style={[styles.assetIconWrap, { backgroundColor: theme.surfaceSoft }]}>
+                <MaterialCommunityIcons name="file-document-outline" size={26} color={theme.primary} />
               </View>
               <View style={styles.assetMeta}>
-                <Text style={styles.assetTitle}>{profile?.resume_file_name?.trim() || 'Resume not added yet'}</Text>
-                <Text style={styles.assetSubtitle}>
+                <Text style={[styles.assetTitle, { color: theme.text }]}>{profile?.resume_file_name?.trim() || 'Resume not added yet'}</Text>
+                <Text style={[styles.assetSubtitle, { color: theme.textMuted }]}>
                   {profile?.resume_public_id?.trim()
                     ? 'Stored privately. Opens with a short-lived signed URL.'
                     : profile?.resume_url?.trim()
@@ -809,21 +931,29 @@ export default function ProfileScreen() {
                       : 'Add a Cloudinary or document URL once your upload flow is ready.'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.assetActionButton} onPress={handleOpenResume} activeOpacity={0.85}>
-                <MaterialCommunityIcons name="open-in-new" size={18} color="#16365F" />
+              <TouchableOpacity
+                style={[styles.assetActionButton, { backgroundColor: theme.surfaceSoft, borderColor: theme.border }]}
+                onPress={handleOpenResume}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons name="open-in-new" size={18} color={theme.primary} />
               </TouchableOpacity>
             </View>
             {!hasPrivateResumeColumns && (
-              <Text style={styles.helperText}>
+              <Text style={[styles.helperText, { color: theme.textMuted }]}>
                 Add columns {missingPrivateResumeColumns.join(', ')} for private signed resume access.
               </Text>
             )}
             <View style={styles.resumeActionsRow}>
-              <TouchableOpacity style={styles.resumeSecondaryButton} activeOpacity={0.9} onPress={openResumeEditor}>
-                <Text style={styles.resumeSecondaryButtonText}>Edit Resume Details</Text>
+              <TouchableOpacity
+                style={[styles.resumeSecondaryButton, { backgroundColor: theme.surfaceSoft }]}
+                activeOpacity={0.9}
+                onPress={openResumeEditor}
+              >
+                <Text style={[styles.resumeSecondaryButtonText, { color: theme.text }]}>Edit Resume Details</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.resumeUploadButton}
+                style={[styles.resumeUploadButton, { backgroundColor: theme.primary }]}
                 activeOpacity={0.9}
                 onPress={handlePickAndUploadResume}
                 disabled={uploadingAsset === 'resume'}
@@ -840,11 +970,19 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.surface,
+                shadowColor: isDark ? '#000000' : '#16365F',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Social Links</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Social Links</Text>
               <TouchableOpacity onPress={openSocialEditor} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="pencil" size={18} color="#64748B" />
+                <MaterialCommunityIcons name="pencil" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
             {hasColumn('social_links') ? (
@@ -856,84 +994,54 @@ export default function ProfileScreen() {
                     onPress={() => handleOpenSocialLink(link)}
                     activeOpacity={0.85}
                   >
-                    <View style={styles.linkIconWrap}>
-                      <MaterialCommunityIcons name="link-variant" size={18} color="#16365F" />
+                    <View style={[styles.linkIconWrap, { backgroundColor: theme.surfaceSoft }]}>
+                      <MaterialCommunityIcons name="link-variant" size={18} color={theme.primary} />
                     </View>
-                    <Text style={styles.linkText}>{socialLabel(link)}</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+                    <Text style={[styles.linkText, { color: theme.text }]}>{socialLabel(link)}</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={theme.textMuted} />
                   </TouchableOpacity>
                 ))
               ) : (
-                <Text style={styles.emptyBody}>Add Instagram, LinkedIn, GitHub, portfolio, or any public profile you want visible.</Text>
+                <Text style={[styles.emptyBody, { color: theme.textMuted }]}>Add Instagram, LinkedIn, GitHub, portfolio, or any public profile you want visible.</Text>
               )
             ) : (
-              <Text style={styles.emptyBody}>This section is wired in the app, but your `profiles.social_links` column is not created yet.</Text>
+              <Text style={[styles.emptyBody, { color: theme.textMuted }]}>This section is wired in the app, but your `profiles.social_links` column is not created yet.</Text>
             )}
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.surface,
+                shadowColor: isDark ? '#000000' : '#16365F',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Recent Posts</Text>
-              <Text style={styles.cardCaption}>{postsCount} total</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Recent Posts</Text>
+              <Text style={[styles.cardCaption, { color: theme.textMuted }]}>{postsCount} total</Text>
             </View>
             {recentPosts.length > 0 ? (
               recentPosts.map((post) => (
                 <View key={post.id} style={styles.postRow}>
-                  <View style={styles.postDot} />
+                  <View style={[styles.postDot, { backgroundColor: theme.primary }]} />
                   <View style={styles.postTextWrap}>
-                    <Text style={styles.postTitle} numberOfLines={1}>
+                    <Text style={[styles.postTitle, { color: theme.text }]} numberOfLines={1}>
                       {post.title?.trim() || post.content?.trim() || 'Untitled post'}
                     </Text>
-                    <Text style={styles.postPreview} numberOfLines={2}>
+                    <Text style={[styles.postPreview, { color: theme.textMuted }]} numberOfLines={2}>
                       {post.content?.trim() || 'No body text added.'}
                     </Text>
-                    <Text style={styles.postMeta}>
+                    <Text style={[styles.postMeta, { color: theme.textMuted }]}>
                       {formatRelativeTime(post.created_at)} • {post.comments_count ?? 0} comments
                     </Text>
                   </View>
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyBody}>Your latest posts will appear here once you publish them from the home feed.</Text>
+              <Text style={[styles.emptyBody, { color: theme.textMuted }]}>Your latest posts will appear here once you publish them from the home feed.</Text>
             )}
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Appearance</Text>
-              <MaterialCommunityIcons
-                name={isDark ? 'weather-night' : 'white-balance-sunny'}
-                size={18}
-                color={isDark ? '#93C5FD' : '#1D4ED8'}
-              />
-            </View>
-            <Text style={styles.cardBody}>
-              Switch between light and dark mode. Your choice is saved on this device.
-            </Text>
-            <TouchableOpacity
-              style={[styles.themeToggleButton, isDark ? styles.themeToggleButtonDark : styles.themeToggleButtonLight]}
-              onPress={toggleMode}
-              activeOpacity={0.9}
-            >
-              <MaterialCommunityIcons
-                name={isDark ? 'moon-waning-crescent' : 'weather-sunny'}
-                size={20}
-                color={isDark ? '#E2E8F0' : '#0F172A'}
-              />
-              <View style={styles.themeToggleTextWrap}>
-                <Text style={[styles.themeToggleTitle, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>
-                  {isDark ? 'Dark mode enabled' : 'Light mode enabled'}
-                </Text>
-                <Text style={[styles.themeToggleSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                  {isDark ? 'Tap to switch to light mode' : 'Tap to switch to dark mode'}
-                </Text>
-              </View>
-              <View style={[styles.themeModePill, isDark ? styles.themeModePillDark : styles.themeModePillLight]}>
-                <Text style={[styles.themeModePillText, { color: isDark ? '#E2E8F0' : '#1D4ED8' }]}>
-                  {mode.toUpperCase()}
-                </Text>
-              </View>
-            </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
@@ -945,15 +1053,15 @@ export default function ProfileScreen() {
 
       <Modal visible={profileModalVisible} transparent animationType="fade" onRequestClose={() => setProfileModalVisible(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-            <TextInput style={styles.input} value={draftName} onChangeText={setDraftName} placeholder="Full name" placeholderTextColor="#94A3B8" />
-            <TextInput style={[styles.input, styles.multilineInput]} value={draftBio} onChangeText={setDraftBio} placeholder="Bio" placeholderTextColor="#94A3B8" multiline />
-            <TextInput style={styles.input} value={draftBranch} onChangeText={setDraftBranch} placeholder="Branch" placeholderTextColor="#94A3B8" />
-            <TextInput style={styles.input} value={draftYear} onChangeText={setDraftYear} placeholder="Year of study" placeholderTextColor="#94A3B8" keyboardType="number-pad" />
-            <TextInput style={styles.input} value={draftAvatarUrl} onChangeText={setDraftAvatarUrl} placeholder="Avatar URL" placeholderTextColor="#94A3B8" autoCapitalize="none" />
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Profile</Text>
+            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftName} onChangeText={setDraftName} placeholder="Full name" placeholderTextColor={theme.textMuted} />
+            <TextInput style={[styles.input, styles.multilineInput, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftBio} onChangeText={setDraftBio} placeholder="Bio" placeholderTextColor={theme.textMuted} multiline />
+            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftBranch} onChangeText={setDraftBranch} placeholder="Branch" placeholderTextColor={theme.textMuted} />
+            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftYear} onChangeText={setDraftYear} placeholder="Year of study" placeholderTextColor={theme.textMuted} keyboardType="number-pad" />
+            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftAvatarUrl} onChangeText={setDraftAvatarUrl} placeholder="Avatar URL" placeholderTextColor={theme.textMuted} autoCapitalize="none" />
             <TouchableOpacity
-              style={styles.uploadButton}
+              style={[styles.uploadButton, { backgroundColor: theme.primary }]}
               activeOpacity={0.9}
               onPress={handlePickAndUploadAvatar}
               disabled={uploadingAsset === 'avatar'}
@@ -967,12 +1075,12 @@ export default function ProfileScreen() {
                 {uploadingAsset === 'avatar' ? 'Uploading...' : 'Pick and Upload Avatar'}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.helperText}>You can still paste a URL manually if needed.</Text>
+            <Text style={[styles.helperText, { color: theme.textMuted }]}>You can still paste a URL manually if needed.</Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted]} onPress={() => setProfileModalVisible(false)}>
-                <Text style={styles.modalButtonMutedText}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted, { backgroundColor: theme.surfaceSoft }]} onPress={() => setProfileModalVisible(false)}>
+                <Text style={[styles.modalButtonMutedText, { color: theme.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary]} onPress={handleSaveProfile}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]} onPress={handleSaveProfile}>
                 <Text style={styles.modalButtonPrimaryText}>{savingSection === 'profile' ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
@@ -982,15 +1090,15 @@ export default function ProfileScreen() {
 
       <Modal visible={skillsModalVisible} transparent animationType="fade" onRequestClose={() => setSkillsModalVisible(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Skills</Text>
-            <Text style={styles.modalHint}>One skill per line, or separate them with commas.</Text>
-            <TextInput style={[styles.input, styles.largeMultilineInput]} value={draftSkills} onChangeText={setDraftSkills} placeholder={'React Native\nUI Design\nBackend'} placeholderTextColor="#94A3B8" multiline />
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Skills</Text>
+            <Text style={[styles.modalHint, { color: theme.textMuted }]}>One skill per line, or separate them with commas.</Text>
+            <TextInput style={[styles.input, styles.largeMultilineInput, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftSkills} onChangeText={setDraftSkills} placeholder={'React Native\nUI Design\nBackend'} placeholderTextColor={theme.textMuted} multiline />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted]} onPress={() => setSkillsModalVisible(false)}>
-                <Text style={styles.modalButtonMutedText}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted, { backgroundColor: theme.surfaceSoft }]} onPress={() => setSkillsModalVisible(false)}>
+                <Text style={[styles.modalButtonMutedText, { color: theme.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary]} onPress={handleSaveSkills}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]} onPress={handleSaveSkills}>
                 <Text style={styles.modalButtonPrimaryText}>{savingSection === 'skills' ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
@@ -1000,15 +1108,15 @@ export default function ProfileScreen() {
 
       <Modal visible={socialModalVisible} transparent animationType="fade" onRequestClose={() => setSocialModalVisible(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Social Links</Text>
-            <Text style={styles.modalHint}>One link per line. Missing protocols will be normalized to https://.</Text>
-            <TextInput style={[styles.input, styles.largeMultilineInput]} value={draftSocialLinks} onChangeText={setDraftSocialLinks} placeholder={'github.com/yourname\nlinkedin.com/in/yourname'} placeholderTextColor="#94A3B8" multiline autoCapitalize="none" />
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Social Links</Text>
+            <Text style={[styles.modalHint, { color: theme.textMuted }]}>One link per line. Missing protocols will be normalized to https://.</Text>
+            <TextInput style={[styles.input, styles.largeMultilineInput, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftSocialLinks} onChangeText={setDraftSocialLinks} placeholder={'github.com/yourname\nlinkedin.com/in/yourname'} placeholderTextColor={theme.textMuted} multiline autoCapitalize="none" />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted]} onPress={() => setSocialModalVisible(false)}>
-                <Text style={styles.modalButtonMutedText}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted, { backgroundColor: theme.surfaceSoft }]} onPress={() => setSocialModalVisible(false)}>
+                <Text style={[styles.modalButtonMutedText, { color: theme.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary]} onPress={handleSaveSocialLinks}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]} onPress={handleSaveSocialLinks}>
                 <Text style={styles.modalButtonPrimaryText}>{savingSection === 'social' ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
@@ -1018,13 +1126,13 @@ export default function ProfileScreen() {
 
       <Modal visible={resumeModalVisible} transparent animationType="fade" onRequestClose={() => setResumeModalVisible(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Resume Link</Text>
-            <Text style={styles.modalHint}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Resume Link</Text>
+            <Text style={[styles.modalHint, { color: theme.textMuted }]}>
               Upload validates PDF type and size (max 10 MB) before sending to Cloudinary.
             </Text>
             <TouchableOpacity
-              style={styles.uploadButton}
+              style={[styles.uploadButton, { backgroundColor: theme.primary }]}
               activeOpacity={0.9}
               onPress={handlePickAndUploadResume}
               disabled={uploadingAsset === 'resume'}
@@ -1038,13 +1146,13 @@ export default function ProfileScreen() {
                 {uploadingAsset === 'resume' ? 'Uploading...' : 'Pick PDF and Upload'}
               </Text>
             </TouchableOpacity>
-            <TextInput style={styles.input} value={draftResumeName} onChangeText={setDraftResumeName} placeholder="Resume file name" placeholderTextColor="#94A3B8" />
-            <TextInput style={[styles.input, styles.multilineInput]} value={draftResumeUrl} onChangeText={handleResumeUrlChange} placeholder="Cloudinary or public document URL" placeholderTextColor="#94A3B8" autoCapitalize="none" multiline />
+            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftResumeName} onChangeText={setDraftResumeName} placeholder="Resume file name" placeholderTextColor={theme.textMuted} />
+            <TextInput style={[styles.input, styles.multilineInput, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftResumeUrl} onChangeText={handleResumeUrlChange} placeholder="Cloudinary or public document URL" placeholderTextColor={theme.textMuted} autoCapitalize="none" multiline />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted]} onPress={() => setResumeModalVisible(false)}>
-                <Text style={styles.modalButtonMutedText}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonMuted, { backgroundColor: theme.surfaceSoft }]} onPress={() => setResumeModalVisible(false)}>
+                <Text style={[styles.modalButtonMutedText, { color: theme.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary]} onPress={handleSaveResume}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]} onPress={handleSaveResume}>
                 <Text style={styles.modalButtonPrimaryText}>{savingSection === 'resume' ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
@@ -1067,9 +1175,33 @@ const styles = StyleSheet.create({
   loadingSkeletonLineSm: { marginTop: 10, width: '58%', height: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)' },
   heroSection: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 110, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   heroEyebrow: { color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '700', letterSpacing: 1.8, textTransform: 'uppercase' },
   heroTitle: { marginTop: 4, color: '#FFFFFF', fontSize: 30, fontWeight: '800', letterSpacing: -0.6 },
   headerAction: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  themeHeaderToggle: { padding: 0 },
+  themeHeaderTrack: {
+    width: 48,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  themeHeaderThumb: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    top: 2,
+  },
+  themeHeaderIconLeft: {
+    position: 'absolute',
+    left: 6,
+  },
+  themeHeaderIconRight: {
+    position: 'absolute',
+    right: 6,
+  },
   profileHeroCard: { marginTop: 22, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.14)', padding: 22, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
   avatarWrap: { width: 112, height: 112, borderRadius: 56, backgroundColor: '#FFFFFF', padding: 4, marginBottom: 16 },
   avatarImage: { width: '100%', height: '100%', borderRadius: 52 },
@@ -1141,58 +1273,6 @@ const styles = StyleSheet.create({
   postMeta: { marginTop: 6, color: '#94A3B8', fontSize: 12, fontWeight: '700' },
   logoutButton: { marginTop: 8, height: 56, borderRadius: 18, backgroundColor: '#D9485F', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   logoutButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  themeToggleButton: {
-    marginTop: 12,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-  },
-  themeToggleButtonLight: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-  },
-  themeToggleButtonDark: {
-    backgroundColor: '#1E293B',
-    borderColor: '#334155',
-  },
-  themeToggleTextWrap: {
-    flex: 1,
-  },
-  themeToggleTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  themeToggleSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  themeModePill: {
-    minWidth: 54,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  themeModePillLight: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#BFDBFE',
-  },
-  themeModePillDark: {
-    backgroundColor: '#0F172A',
-    borderColor: '#334155',
-  },
-  themeModePillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 },
   modalCard: { borderRadius: 24, backgroundColor: '#FFFFFF', padding: 20 },
   modalTitle: { color: '#16365F', fontSize: 20, fontWeight: '800', marginBottom: 8 },

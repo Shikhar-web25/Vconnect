@@ -18,12 +18,6 @@ import { supabase } from '../../supabaseClient';
 import { getMaleAvatar } from '../utils/avatar';
 import { useAppTheme } from '../theme/AppThemeContext';
 
-const PRIMARY = '#4A6D8C';
-const BG = '#F1F5F9';
-const CARD = '#FFFFFF';
-const TEXT_DARK = '#0F172A';
-const TEXT_MUTED = '#64748B';
-
 type ProfileLite = {
   id: string;
   full_name?: string | null;
@@ -218,7 +212,13 @@ const DiscoverScreen = () => {
   const renderTopProfile = ({ item }: { item: TopProfile }) => (
     <TouchableOpacity
       activeOpacity={0.85}
-      style={styles.profileChip}
+      style={[
+        styles.profileChip,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.surfaceSoft,
+        },
+      ]}
       onPress={() =>
         navigation.navigate('UserProfile', {
           userId: item.id,
@@ -228,10 +228,12 @@ const DiscoverScreen = () => {
       }
     >
       <Image source={item.avatar} style={styles.profileAvatar} />
-      <Text style={styles.profileName} numberOfLines={1}>
+      <Text style={[styles.profileName, { color: theme.text }]} numberOfLines={1}>
         {item.name}
       </Text>
-      <Text style={styles.profileMeta}>{item.postsCount} posts • {item.likesTotal} likes</Text>
+      <Text style={[styles.profileMeta, { color: theme.textMuted }]}>
+        {item.postsCount} posts • {item.likesTotal} likes
+      </Text>
     </TouchableOpacity>
   );
 
@@ -241,38 +243,58 @@ const DiscoverScreen = () => {
     const tags = (item.tags ?? []).length > 0 ? (item.tags ?? []) : extractTagsFromContent(item.content);
 
     return (
-      <View style={styles.postCard}>
+      <View
+        style={[
+          styles.postCard,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+          },
+        ]}
+      >
         <View style={styles.postHeader}>
           <View style={styles.authorRow}>
             <Image source={authorAvatar} style={styles.authorAvatar} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.authorName}>{authorName}</Text>
-              <Text style={styles.authorMeta}>{formatRelativeTime(item.created_at)}</Text>
+              <Text style={[styles.authorName, { color: theme.text }]}>{authorName}</Text>
+              <Text style={[styles.authorMeta, { color: theme.textMuted }]}>
+                {formatRelativeTime(item.created_at)}
+              </Text>
             </View>
           </View>
         </View>
 
-        <Text style={styles.postTitle}>{item.title?.trim() || 'Untitled Post'}</Text>
-        <Text style={styles.postBody}>{item.content?.trim() || 'No content added.'}</Text>
+        <Text style={[styles.postTitle, { color: theme.text }]}>{item.title?.trim() || 'Untitled Post'}</Text>
+        <Text style={[styles.postBody, { color: theme.textMuted }]}>
+          {item.content?.trim() || 'No content added.'}
+        </Text>
 
         {tags.length > 0 ? (
           <View style={styles.tagRow}>
             {tags.slice(0, 6).map((tag) => (
-              <View key={`${item.id}-${tag}`} style={styles.tagChip}>
-                <Text style={styles.tagText}>#{tag}</Text>
+              <View
+                key={`${item.id}-${tag}`}
+                style={[
+                  styles.tagChip,
+                  {
+                    backgroundColor: isDark ? '#213149' : '#E8F0F7',
+                  },
+                ]}
+              >
+                <Text style={[styles.tagText, { color: theme.primary }]}>#{tag}</Text>
               </View>
             ))}
           </View>
         ) : null}
 
-        <View style={styles.postFooter}>
+        <View style={[styles.postFooter, { borderTopColor: theme.border }]}>
           <View style={styles.footerItem}>
-            <Icon name="thumb-up" size={15} color="#64748B" />
-            <Text style={styles.footerText}>{item.likes_count ?? 0}</Text>
+            <Icon name="thumb-up" size={15} color={theme.textMuted} />
+            <Text style={[styles.footerText, { color: theme.textMuted }]}>{item.likes_count ?? 0}</Text>
           </View>
           <View style={styles.footerItem}>
-            <Icon name="chat-bubble-outline" size={15} color="#64748B" />
-            <Text style={styles.footerText}>{item.comments_count ?? 0}</Text>
+            <Icon name="chat-bubble-outline" size={15} color={theme.textMuted} />
+            <Text style={[styles.footerText, { color: theme.textMuted }]}>{item.comments_count ?? 0}</Text>
           </View>
         </View>
       </View>
@@ -281,47 +303,57 @@ const DiscoverScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.primary} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Discover</Text>
+        <View style={[styles.header, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Discover</Text>
           <View style={styles.searchRow}>
-            <View style={styles.searchBox}>
-              <Icon name="search" size={18} color="#94A3B8" />
+            <View style={[styles.searchBox, { backgroundColor: theme.surfaceSoft }]}>
+              <Icon name="search" size={18} color={theme.textMuted} />
               <TextInput
                 value={searchText}
                 onChangeText={setSearchText}
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: theme.text }]}
                 placeholder="Search posts, tags, people..."
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
           </View>
         </View>
 
         {loading ? (
-          <View style={styles.loaderWrap}>
-            <ActivityIndicator size="large" color={PRIMARY} />
+          <View style={[styles.loaderWrap, { backgroundColor: theme.background }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
           </View>
         ) : (
           <FlatList
             data={filteredPosts}
             keyExtractor={(item) => item.id}
             renderItem={renderPost}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { backgroundColor: theme.background }]}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
             ListHeaderComponent={
-              <View style={styles.topProfilesCard}>
+              <View
+                style={[
+                  styles.topProfilesCard,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
                 <View style={styles.topProfilesHeader}>
-                  <Text style={styles.topProfilesTitle}>Top Profiles</Text>
+                  <Text style={[styles.topProfilesTitle, { color: theme.text }]}>Top Profiles</Text>
                   <TouchableOpacity onPress={() => navigation.navigate('AllSeniors')}>
-                    <Text style={styles.viewAllText}>View All</Text>
+                    <Text style={[styles.viewAllText, { color: theme.primary }]}>View All</Text>
                   </TouchableOpacity>
                 </View>
 
                 {topProfiles.length === 0 ? (
-                  <Text style={styles.emptyTopText}>No ranked profiles yet. Publish posts to populate this list.</Text>
+                  <Text style={[styles.emptyTopText, { color: theme.textMuted }]}>
+                    No ranked profiles yet. Publish posts to populate this list.
+                  </Text>
                 ) : (
                   <FlatList
                     data={topProfiles}
@@ -333,20 +365,28 @@ const DiscoverScreen = () => {
                   />
                 )}
 
-                <Text style={styles.rankingHint}>Ranking = total posts + total likes</Text>
+                <Text style={[styles.rankingHint, { color: theme.textMuted }]}>
+                  Ranking = total posts + total likes
+                </Text>
               </View>
             }
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
-                <Icon name="inbox" size={38} color="#CBD5E1" />
-                <Text style={styles.emptyTitle}>No posts yet</Text>
-                <Text style={styles.emptySub}>Create the first post from the + button.</Text>
+                <Icon name="inbox" size={38} color={theme.textMuted} />
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>No posts yet</Text>
+                <Text style={[styles.emptySub, { color: theme.textMuted }]}>
+                  Create the first post from the + button.
+                </Text>
               </View>
             }
           />
         )}
 
-        <TouchableOpacity style={styles.fab} activeOpacity={0.88} onPress={() => navigation.navigate('CreatePost')}>
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('CreatePost')}
+        >
           <Icon name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
       </SafeAreaView>
@@ -357,15 +397,13 @@ const DiscoverScreen = () => {
 export default DiscoverScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: PRIMARY },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 14,
-    backgroundColor: PRIMARY,
   },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.4,
@@ -376,7 +414,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -384,26 +421,21 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    color: TEXT_DARK,
     fontSize: 13,
   },
   loaderWrap: {
     flex: 1,
-    backgroundColor: BG,
     alignItems: 'center',
     justifyContent: 'center',
   },
   listContent: {
-    backgroundColor: BG,
     padding: 14,
     paddingBottom: 100,
     gap: 10,
   },
   topProfilesCard: {
-    backgroundColor: CARD,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     padding: 12,
     marginBottom: 6,
   },
@@ -416,22 +448,18 @@ const styles = StyleSheet.create({
   topProfilesTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#334155',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   viewAllText: {
     fontSize: 12,
     fontWeight: '700',
-    color: PRIMARY,
   },
   profileListContent: { gap: 10 },
   profileChip: {
     width: 132,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
     padding: 10,
     marginRight: 10,
   },
@@ -444,58 +472,50 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 12,
     fontWeight: '700',
-    color: TEXT_DARK,
   },
   profileMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: TEXT_MUTED,
   },
   rankingHint: {
     marginTop: 10,
     fontSize: 11,
-    color: '#94A3B8',
     fontStyle: 'italic',
   },
   emptyTopText: {
-    color: TEXT_MUTED,
     fontSize: 12,
   },
   postCard: {
-    backgroundColor: CARD,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     padding: 14,
   },
   postHeader: { marginBottom: 8 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   authorAvatar: { width: 34, height: 34, borderRadius: 17 },
-  authorName: { fontSize: 13, fontWeight: '700', color: TEXT_DARK },
-  authorMeta: { marginTop: 1, fontSize: 10, color: TEXT_MUTED },
-  postTitle: { fontSize: 15, fontWeight: '800', color: TEXT_DARK, marginBottom: 4 },
-  postBody: { fontSize: 13, lineHeight: 19, color: '#334155' },
+  authorName: { fontSize: 13, fontWeight: '700' },
+  authorMeta: { marginTop: 1, fontSize: 10 },
+  postTitle: { fontSize: 15, fontWeight: '800', marginBottom: 4 },
+  postBody: { fontSize: 13, lineHeight: 19 },
   tagRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tagChip: {
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 99,
-    backgroundColor: '#E8F0F7',
   },
-  tagText: { fontSize: 11, fontWeight: '700', color: '#1B4B7E' },
+  tagText: { fontSize: 11, fontWeight: '700' },
   postFooter: {
     marginTop: 10,
     flexDirection: 'row',
     gap: 16,
     borderTopWidth: 1,
-    borderTopColor: '#EEF2F7',
     paddingTop: 10,
   },
   footerItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  footerText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '700' },
+  footerText: { fontSize: 12, fontWeight: '700' },
   emptyWrap: { alignItems: 'center', marginTop: 44 },
-  emptyTitle: { marginTop: 10, fontSize: 16, fontWeight: '800', color: '#334155' },
-  emptySub: { marginTop: 4, fontSize: 12, color: '#94A3B8' },
+  emptyTitle: { marginTop: 10, fontSize: 16, fontWeight: '800' },
+  emptySub: { marginTop: 4, fontSize: 12 },
   fab: {
     position: 'absolute',
     right: 22,
@@ -503,10 +523,8 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: PRIMARY,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

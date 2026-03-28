@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/AuthNavigator';
 import { useAppTheme } from '../../theme/AppThemeContext';
+import { supabase } from '../../../supabaseClient';
+import { fetchUnreadNotificationCount } from '../../lib/notifications';
 
 const ACCENT = '#5B6AF0';
 const BG = '#E8EAF6';
@@ -36,11 +38,54 @@ export const FixedHeader: React.FC<{ onSearch?: (text: string) => void; postCoun
     const { theme } = useAppTheme();
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const [searchText, setSearchText] = useState('');
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const handleSearch = (text: string) => {
         setSearchText(text);
         onSearch?.(text);
     };
+
+    const loadUnreadCount = useCallback(async (userId: string) => {
+        const count = await fetchUnreadNotificationCount(userId);
+        setUnreadCount(count);
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        let channel: any = null;
+
+        const init = async () => {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+            if (!active || !user?.id) return;
+
+            await loadUnreadCount(user.id);
+
+            channel = supabase
+                .channel(`home-notification-badge-${user.id}`)
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+                    () => loadUnreadCount(user.id),
+                )
+                .on(
+                    'postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'comments' },
+                    () => loadUnreadCount(user.id),
+                )
+                .subscribe();
+        };
+
+        init();
+
+        return () => {
+            active = false;
+            if (channel) {
+                supabase.removeChannel(channel);
+            }
+        };
+    }, [loadUnreadCount]);
 
     const goToNotifications = () => {
         navigation.navigate('Notifications');
@@ -61,7 +106,11 @@ export const FixedHeader: React.FC<{ onSearch?: (text: string) => void; postCoun
                         activeOpacity={0.7}
                     >
                         <Ionicons name="notifications" size={22} color={theme.text} />
-                        <View style={[styles.notificationBadge, { backgroundColor: theme.primary, borderColor: theme.background }]} />
+                        {unreadCount > 0 ? (
+                            <View style={[styles.notificationBadge, { backgroundColor: theme.primary, borderColor: theme.background }]}>
+                                <Text style={styles.notificationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                            </View>
+                        ) : null}
                     </TouchableOpacity>
                 </View>
 
@@ -185,14 +234,20 @@ const styles = StyleSheet.create({
     },
     notificationBadge: {
         position: 'absolute',
-        top: 12,
-        right: 12,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: ACCENT,
-        borderWidth: 1.5,
-        borderColor: BG,
+        top: 7,
+        right: 6,
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        paddingHorizontal: 3,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.2,
+    },
+    notificationBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '800',
     },
     glassSearch: {
         flexDirection: 'row',

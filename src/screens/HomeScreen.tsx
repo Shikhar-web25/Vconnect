@@ -126,6 +126,7 @@ const HomeScreen = () => {
     const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
     const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
     const [previewUser, setPreviewUser] = useState<ProfilePreviewUser | null>(null);
+    const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
     const skeletonPulse = useRef(new Animated.Value(0.42)).current;
 
     useEffect(() => {
@@ -158,7 +159,7 @@ const HomeScreen = () => {
         }
     }, [selectedQuestionId]);
 
-    const loadCurrentUser = async () => {
+    const loadCurrentUser = useCallback(async () => {
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -182,9 +183,9 @@ const HomeScreen = () => {
         }
 
         setCurrentUser({ id: user.id });
-    };
+    }, []);
 
-    const loadPosts = async () => {
+    const loadPosts = useCallback(async () => {
         setLoading(true);
         setErrorMessage(null);
 
@@ -214,7 +215,20 @@ const HomeScreen = () => {
 
         setPosts((rows ?? []).map(mapPost));
         setLoading(false);
-    };
+    }, []);
+
+    useEffect(() => {
+        const channel = supabase
+            .channel('home-feed-live')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+                loadPosts();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [loadPosts]);
 
     const loadComments = async (postId: string) => {
         let rows: any[] | null = null;
@@ -440,10 +454,44 @@ const HomeScreen = () => {
         });
     }, []);
 
-    const handleDelete = useCallback((id: string) => {
-        setPosts((prev) => prev.filter((post) => post.id !== id));
-        setSelectedQuestionId((current) => (current === id ? null : current));
-    }, []);
+    const handleDelete = useCallback(
+        async (id: string) => {
+            if (!currentUser?.id || deletingPostId) return;
+
+            const targetPost = posts.find((post) => post.id === id);
+            if (!targetPost || targetPost.userId !== currentUser.id) {
+                setErrorMessage('You can only delete your own posts.');
+                return;
+            }
+
+            setDeletingPostId(id);
+            setErrorMessage(null);
+
+            await supabase.from('comments').delete().eq('post_id', id);
+
+            const { error } = await supabase
+                .from('posts')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', currentUser.id);
+
+            setDeletingPostId(null);
+
+            if (error) {
+                setErrorMessage(error.message);
+                return;
+            }
+
+            setPosts((prev) => prev.filter((post) => post.id !== id));
+            setSelectedQuestionId((current) => (current === id ? null : current));
+            setCommentsByPostId((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
+        },
+        [currentUser?.id, deletingPostId, posts],
+    );
 
     const handleAvatarPress = useCallback(
         (user: { id: string; name: string; avatar: any; category: string }) => {
@@ -511,10 +559,11 @@ const HomeScreen = () => {
                 onLike={handleLike}
                 onSave={handleSave}
                 onDelete={handleDelete}
+                canDelete={item.userId === currentUser?.id}
                 onAvatarPress={handleAvatarPress}
             />
         ),
-        [handleAvatarPress, handleDelete, handleLike, handleSave, likedPosts, savedPosts],
+        [currentUser?.id, handleAvatarPress, handleDelete, handleLike, handleSave, likedPosts, savedPosts],
     );
 
     const renderSkeletonCards = () =>
