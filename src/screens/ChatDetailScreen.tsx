@@ -26,6 +26,7 @@ import type { RootStackParamList } from '../navigation/AuthNavigator';
 import { getMaleAvatar } from '../utils/avatar';
 import { supabase } from '../../supabaseClient';
 import { useAppTheme } from '../theme/AppThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DEEP = '#1E1B4B';
 const ACCENT = '#5B6AF0';
@@ -48,6 +49,7 @@ interface Message {
 const STATUS_H = StatusBar.currentHeight || 0;
 const HEADER_PT = Platform.OS === 'android' ? STATUS_H + 10 : 50;
 const HEADER_TOTAL = HEADER_PT + 12 + 38;
+const QUICK_EMOJIS = ['😀', '😂', '😍', '🔥', '👍', '🙏', '🎉', '😎', '😢', '❤️'];
 
 const toImageSource = (value: any): ImageSourcePropType => {
   if (typeof value === 'string' && value.trim()) return { uri: value };
@@ -57,6 +59,7 @@ const toImageSource = (value: any): ImageSourcePropType => {
 
 const ChatDetailScreen = () => {
   const { theme, isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<ChatDetailScreenRouteProp>();
   const { chatId, name, avatar, userId } = route.params || {
@@ -73,6 +76,7 @@ const ChatDetailScreen = () => {
   const [attachVisible, setAttachVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [comingSoon, setComingSoon] = useState(false);
+  const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const formatTime = (isoDate?: string | null) => {
@@ -326,6 +330,17 @@ const ChatDetailScreen = () => {
     setComingSoon(true);
   }, []);
 
+  const toggleEmojiPicker = useCallback(() => {
+    if (!emojiPickerVisible) {
+      Keyboard.dismiss();
+    }
+    setEmojiPickerVisible((prev) => !prev);
+  }, [emojiPickerVisible]);
+
+  const onEmojiPress = useCallback((emoji: string) => {
+    setInputText((prev) => `${prev}${emoji}`);
+  }, []);
+
   const renderMsg = useCallback(
     ({ item }: { item: Message }) => (
       <View style={[styles.msgRow, item.isMe ? styles.rowR : styles.rowL]}>
@@ -383,8 +398,8 @@ const ChatDetailScreen = () => {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_TOTAL : HEADER_TOTAL}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? HEADER_TOTAL : 0}
       >
         <ImageBackground source={DOODLE} style={styles.chatArea} imageStyle={styles.doodleImage} resizeMode="repeat">
           <View style={styles.doodleTint} />
@@ -394,13 +409,21 @@ const ChatDetailScreen = () => {
             data={messages}
             keyExtractor={(i) => i.id}
             renderItem={renderMsg}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: emojiPickerVisible ? 18 : 10 },
+            ]}
             keyboardShouldPersistTaps="handled"
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
             style={{ flex: 1 }}
           />
 
-          <View style={styles.inputOuter}>
+          <View
+            style={[
+              styles.inputOuter,
+              { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 4) : 4 },
+            ]}
+          >
             <View style={styles.floatingInput}>
               <TouchableOpacity style={styles.plusBtn} onPress={() => setAttachVisible(true)} activeOpacity={0.7}>
                 <Ionicons name="add-circle" size={26} color={ACCENT} />
@@ -413,7 +436,7 @@ const ChatDetailScreen = () => {
                 onChangeText={setInputText}
                 multiline
               />
-              <TouchableOpacity style={styles.emojiBtn} onPress={() => setComingSoon(true)}>
+              <TouchableOpacity style={styles.emojiBtn} onPress={toggleEmojiPicker}>
                 <MaterialCommunityIcons name="emoticon-happy-outline" size={24} color="#A0AEC0" />
               </TouchableOpacity>
               <TouchableOpacity
@@ -429,6 +452,20 @@ const ChatDetailScreen = () => {
                 />
               </TouchableOpacity>
             </View>
+            {emojiPickerVisible ? (
+              <View style={styles.emojiTray}>
+                {QUICK_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={styles.emojiChip}
+                    onPress={() => onEmojiPress(emoji)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.emojiText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
           </View>
         </ImageBackground>
       </KeyboardAvoidingView>
@@ -559,8 +596,8 @@ const styles = StyleSheet.create({
   timeReceived: { color: '#94A3B8' },
   inputOuter: {
     paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   floatingInput: {
     flexDirection: 'row',
@@ -595,6 +632,30 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   sendActive: { backgroundColor: ACCENT, elevation: 4 },
+  emojiTray: {
+    marginTop: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emojiChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 2,
+    marginVertical: 2,
+  },
+  emojiText: {
+    fontSize: 20,
+  },
   overlay: { flex: 1, backgroundColor: 'rgba(30,26,46,0.4)' },
   menu: { position: 'absolute', backgroundColor: '#FFF', borderRadius: 18, width: 185, paddingVertical: 8, elevation: 10 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },

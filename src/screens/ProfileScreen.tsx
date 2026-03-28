@@ -775,6 +775,16 @@ export default function ProfileScreen() {
           setPostsCount(0);
           setCommentsCount(0);
           setSavesCount(0);
+          setTimeout(() => {
+            try {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch {
+              // Auth state change already moved navigator to guest stack.
+            }
+          }, 60);
         },
       },
     ]);

@@ -363,23 +363,22 @@ const HomeScreen = () => {
             content: text,
         };
 
-        const { data: inserted, error: insertError } = await supabase
+        const { error: insertError } = await supabase
             .from('comments')
-            .insert(insertPayload)
-            .select('id, content, created_at, user_id')
-            .single();
+            .insert(insertPayload);
 
-        if (insertError || !inserted) {
+        if (insertError) {
             setErrorMessage(insertError?.message ?? 'Could not add comment.');
             return null;
         }
 
+        const nowIso = new Date().toISOString();
         const comment: FeedComment = {
-            id: inserted.id,
+            id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             userName: actor.full_name ?? actor.username ?? 'You',
             avatar: actor.avatar_url ?? FALLBACK_AVATAR,
-            text: inserted.content ?? text,
-            time: formatTimeAgo(inserted.created_at),
+            text: text,
+            time: formatTimeAgo(nowIso),
         };
 
         setCommentsByPostId((prev) => ({
