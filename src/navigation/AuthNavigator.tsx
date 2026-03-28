@@ -6,6 +6,8 @@ import ForgotPasswordScreen from '../screens/login/app/forgot-password';
 import SplashScreen from '../screens/Splashscreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
+import NotificationScreen from '../screens/NotificationScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -13,14 +15,14 @@ export type RootStackParamList = {
   Signup: undefined;
   ForgotPassword: undefined;
   Main: undefined;
-  ChatDetail: { chatId: string; name: string; avatar: string };
+  ChatDetail: { chatId: string; name: string; avatar: any };
+  UserProfile: { name: string; avatar: any; batch?: string; about?: string; bio?: string; contributions?: number };
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AuthNavigator = () => {
-  // TODO: Add authentication state logic here
-  // For now, we'll always show login first
   const isAuthenticated = false;
 
   return (
@@ -35,47 +37,22 @@ const AuthNavigator = () => {
         <Stack.Screen name="Main" component={BottomTabNavigator} />
       ) : (
         <>
-          <Stack.Screen
-            name="Splash"
-            component={SplashScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Main"
-            component={BottomTabNavigator}
-          />
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Main" component={BottomTabNavigator} />
           <Stack.Screen
             name="Signup"
             component={SignupScreen}
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              title: '',
-              headerTintColor: '#FFFFFF',
-              gestureEnabled: true
-            }}
+            options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
           />
           <Stack.Screen
             name="ForgotPassword"
             component={ForgotPasswordScreen}
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              title: '',
-              headerTintColor: '#FFFFFF',
-              gestureEnabled: true
-            }}
+            options={{ headerShown: true, headerTransparent: true, title: '', headerTintColor: '#FFFFFF' }}
           />
-          <Stack.Screen
-            name="ChatDetail"
-            component={ChatDetailScreen}
-            options={{ headerShown: false }}
-          />
+          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+          <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+          <Stack.Screen name="Notifications" component={NotificationScreen} />
         </>
       )}
     </Stack.Navigator>
