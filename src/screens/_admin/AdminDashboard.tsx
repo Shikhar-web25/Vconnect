@@ -376,7 +376,7 @@ export default function AdminDashboard({ navigation }: Props) {
           </View>
           <Text style={styles.heroTitle}>Vconnect Control Room</Text>
           <Text style={styles.heroSubtitle}>
-            Hidden access is tied to {ADMIN_EMAIL}. Swipe down on your profile avatar to get here.
+            Hidden access is tied to {ADMIN_EMAIL}. Tap your profile avatar 5 times quickly to get here.
           </Text>
 
           <View style={styles.heroStatsRow}>

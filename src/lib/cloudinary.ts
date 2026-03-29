@@ -26,6 +26,46 @@ type DownloadUrlResponse = {
   expiresAt: number;
 };
 
+const parseFunctionInvokeError = async (error: any) => {
+  if (!error) return null;
+  const context = (error as any).context;
+  if (context?.json) {
+    try {
+      const body = await context.json();
+      const detail =
+        (typeof body?.error === "string" && body.error) ||
+        (typeof body?.message === "string" && body.message) ||
+        (typeof body?.details === "string" && body.details);
+      if (detail) return detail;
+    } catch {
+      // Ignore JSON parse errors and try plain text next.
+    }
+  }
+  if (context?.text) {
+    try {
+      const text = await context.text();
+      if (typeof text === "string" && text.trim()) return text.trim();
+    } catch {
+      // Ignore text parse errors.
+    }
+  }
+  return error?.message ?? null;
+};
+
+const buildFunctionAuthHeaders = async () => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('Your session is not valid. Please log in again and retry.');
+  }
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+};
+
 export const uploadToCloudinary = async ({
   file,
   preset,
@@ -37,12 +77,15 @@ export const uploadToCloudinary = async ({
   resourceType?: CloudinaryResourceType;
   deliveryType?: CloudinaryDeliveryType;
 }) => {
+  const headers = await buildFunctionAuthHeaders();
   const { data, error } = await supabase.functions.invoke<SignatureResponse>("cloudinary-sign", {
     body: { action: "upload", preset, resourceType, deliveryType },
+    headers,
   });
 
   if (error || !data) {
-    throw new Error(error?.message || "Failed to get Cloudinary signature.");
+    const detail = await parseFunctionInvokeError(error);
+    throw new Error(detail || "Failed to get Cloudinary signature.");
   }
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${data.cloudName}/${data.resourceType}/upload`;
@@ -88,6 +131,7 @@ export const getCloudinaryDownloadUrl = async ({
   format?: string;
   expiresInSeconds?: number;
 }) => {
+  const headers = await buildFunctionAuthHeaders();
   const { data, error } = await supabase.functions.invoke<DownloadUrlResponse>("cloudinary-sign", {
     body: {
       action: "download",
@@ -97,10 +141,12 @@ export const getCloudinaryDownloadUrl = async ({
       format,
       expiresInSeconds,
     },
+    headers,
   });
 
   if (error || !data?.downloadUrl) {
-    throw new Error(error?.message || "Failed to get signed resume URL.");
+    const detail = await parseFunctionInvokeError(error);
+    throw new Error(detail || "Failed to get signed resume URL.");
   }
 
   return data.downloadUrl;

@@ -305,7 +305,7 @@ const DiscoverScreen = () => {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
-        <View style={[styles.header, { backgroundColor: theme.surface }]}>
+        <View style={[styles.header, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Discover</Text>
           <View style={styles.searchRow}>
             <View style={[styles.searchBox, { backgroundColor: theme.surfaceSoft }]}>
@@ -402,6 +402,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
     fontSize: 30,

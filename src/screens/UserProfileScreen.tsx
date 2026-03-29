@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     View,
     Text,
     StyleSheet,
@@ -12,6 +14,7 @@ import {
     Dimensions,
     Modal,
     TouchableWithoutFeedback,
+    Linking,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -35,6 +38,23 @@ type PublicProfile = {
     bio?: string | null;
     avatar_url?: string | null;
     year_of_study?: number | null;
+    social_links?: string[] | null;
+    resume_url?: string | null;
+    resume_file_name?: string | null;
+};
+
+type SharedItem = {
+    id: string;
+    type: 'media' | 'doc' | 'link';
+    label: string;
+    url: string;
+    createdAt?: string | null;
+};
+
+type StarredItem = {
+    id: string;
+    text: string;
+    createdAt?: string | null;
 };
 
 const toImageSource = (value: any) => {
@@ -43,6 +63,13 @@ const toImageSource = (value: any) => {
     if (value && typeof value === 'object') return value;
     return getMaleAvatar(0);
 };
+
+const URL_REGEX = /https?:\/\/[^\s)]+/gi;
+const DOC_URL_REGEX = /\.(pdf|docx?|pptx?|xlsx?|txt)(\?|#|$)/i;
+const MEDIA_URL_REGEX = /\.(png|jpe?g|webp|gif|mp4|mov|mkv|avi)(\?|#|$)/i;
+
+const normalizeMessageText = (row: any) => `${row?.message_text ?? row?.content ?? ''}`.trim();
+const extractUrls = (value: string) => Array.from(new Set(value.match(URL_REGEX) ?? []));
 
 // Animated counter
 const Counter = ({
@@ -86,9 +113,14 @@ const UserProfileScreen = () => {
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(30)).current;
-    const [comingSoon, setComingSoon] = useState(false);
     const [profile, setProfile] = useState<PublicProfile | null>(null);
     const [viewerId, setViewerId] = useState<string | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
+    const [portfolioVisible, setPortfolioVisible] = useState(false);
+    const [sharedVisible, setSharedVisible] = useState(false);
+    const [starredVisible, setStarredVisible] = useState(false);
+    const [sharedItems, setSharedItems] = useState<SharedItem[]>([]);
+    const [starredItems, setStarredItems] = useState<StarredItem[]>([]);
     const [stats, setStats] = useState({
         posts: 0,
         connections: 0,
@@ -105,6 +137,7 @@ const UserProfileScreen = () => {
         let mounted = true;
 
         const loadUserProfile = async () => {
+            setProfileLoading(true);
             const {
                 data: { user },
             } = await supabase.auth.getUser();
@@ -112,24 +145,138 @@ const UserProfileScreen = () => {
             setViewerId(user?.id ?? null);
 
             const targetUserId = params.userId ?? user?.id ?? null;
-            if (!targetUserId) return;
+            if (!targetUserId) {
+                if (mounted) setProfileLoading(false);
+                return;
+            }
 
-            const [profileResult, postsResult, sentMessagesResult, receivedMessagesResult] =
-                await Promise.all([
-                    supabase
-                        .from('profiles')
-                        .select('id, full_name, username, bio, avatar_url, year_of_study')
-                        .eq('id', targetUserId)
-                        .single(),
-                    supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
-                    supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', targetUserId),
-                    supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', targetUserId),
-                ]);
+            let profileData: PublicProfile | null = null;
+            const profileSelectVariants = [
+                'id, full_name, username, bio, avatar_url, year_of_study, social_links, resume_url, resume_file_name',
+                'id, full_name, username, bio, avatar_url, year_of_study',
+            ];
+            for (const selectValue of profileSelectVariants) {
+                const result = await supabase
+                    .from('profiles')
+                    .select(selectValue)
+                    .eq('id', targetUserId)
+                    .single();
+                if (!result.error && result.data) {
+                    profileData = result.data as unknown as PublicProfile;
+                    break;
+                }
+            }
+
+            const [postsResult, sentMessagesResult, receivedMessagesResult] = await Promise.all([
+                supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+                supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', targetUserId),
+                supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', targetUserId),
+            ]);
+
+            let conversationRows: any[] = [];
+            if (user?.id && targetUserId !== user.id) {
+                const messageSelectVariants = [
+                    'id, sender_id, receiver_id, message_text, content, created_at',
+                    'id, sender_id, receiver_id, message_text, created_at',
+                    'id, sender_id, receiver_id, content, created_at',
+                ];
+                for (const selectValue of messageSelectVariants) {
+                    const result = await supabase
+                        .from('messages')
+                        .select(selectValue)
+                        .or(
+                            `and(sender_id.eq.${targetUserId},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${targetUserId})`,
+                        )
+                        .order('created_at', { ascending: false })
+                        .limit(250);
+                    if (!result.error) {
+                        conversationRows = (result.data as any[]) ?? [];
+                        break;
+                    }
+                }
+            }
+
+            let starredMessageIds = new Set<string>();
+            const conversationMessageIds = conversationRows
+                .map((row) => `${row?.id ?? ''}`.trim())
+                .filter(Boolean);
+            if (user?.id && conversationMessageIds.length > 0) {
+                const starsResult = await supabase
+                    .from('message_stars')
+                    .select('message_id')
+                    .eq('user_id', user.id)
+                    .in('message_id', conversationMessageIds);
+                if (!starsResult.error) {
+                    starredMessageIds = new Set(
+                        ((starsResult.data as any[]) ?? [])
+                            .map((row) => `${row?.message_id ?? ''}`.trim())
+                            .filter(Boolean),
+                    );
+                }
+            }
+
+            const seenShared = new Set<string>();
+            const nextShared: SharedItem[] = [];
+            const nextStarred: StarredItem[] = [];
+            for (const row of conversationRows) {
+                const messageText = normalizeMessageText(row);
+                if (!messageText) continue;
+
+                const isStarred = starredMessageIds.has(`${row?.id ?? ''}`) || messageText.includes('⭐') || messageText.includes('★');
+                if (isStarred) {
+                    nextStarred.push({
+                        id: row.id,
+                        text: messageText,
+                        createdAt: row.created_at,
+                    });
+                }
+
+                const parsedMediaUrl =
+                    messageText.startsWith('[gif]') || messageText.startsWith('[sticker]')
+                        ? messageText.replace(/^\[(gif|sticker)\]/, '').trim()
+                        : null;
+                if (parsedMediaUrl && !seenShared.has(parsedMediaUrl)) {
+                    seenShared.add(parsedMediaUrl);
+                    nextShared.push({
+                        id: `${row.id}-media`,
+                        type: 'media',
+                        label: 'Media from chat',
+                        url: parsedMediaUrl,
+                        createdAt: row.created_at,
+                    });
+                }
+
+                const urls = extractUrls(messageText);
+                urls.forEach((url, index) => {
+                    if (seenShared.has(url)) return;
+                    seenShared.add(url);
+                    const isDoc = DOC_URL_REGEX.test(url);
+                    const isMedia = MEDIA_URL_REGEX.test(url) || /giphy|tenor|cloudinary/i.test(url);
+                    const type: SharedItem['type'] = isDoc ? 'doc' : isMedia ? 'media' : 'link';
+                    nextShared.push({
+                        id: `${row.id}-url-${index}`,
+                        type,
+                        label: type === 'doc' ? 'Document link' : type === 'media' ? 'Media link' : 'Shared link',
+                        url,
+                        createdAt: row.created_at,
+                    });
+                });
+            }
+
+            if (profileData?.resume_url && !seenShared.has(profileData.resume_url)) {
+                seenShared.add(profileData.resume_url);
+                nextShared.push({
+                    id: 'profile-resume',
+                    type: 'doc',
+                    label: profileData.resume_file_name?.trim() || 'Profile resume',
+                    url: profileData.resume_url,
+                });
+            }
 
             if (!mounted) return;
-            if (!profileResult.error && profileResult.data) {
-                setProfile(profileResult.data as PublicProfile);
-            }
+            setProfile(profileData);
+            setSharedItems(nextShared);
+            setStarredItems(nextStarred);
 
             const postsCount = postsResult.count ?? 0;
             const connectionsCount = (sentMessagesResult.count ?? 0) + (receivedMessagesResult.count ?? 0);
@@ -138,6 +285,7 @@ const UserProfileScreen = () => {
                 posts: postsCount,
                 connections: connectionsCount,
             });
+            setProfileLoading(false);
         };
 
         loadUserProfile();
@@ -163,10 +311,47 @@ const UserProfileScreen = () => {
         typeof params.contributions === 'number' && Number.isFinite(params.contributions)
             ? params.contributions
             : null;
+    const portfolioLinks = useMemo(() => {
+        const links: { id: string; label: string; url: string }[] = [];
+        (profile?.social_links ?? []).forEach((link, index) => {
+            if (!link?.trim()) return;
+            links.push({
+                id: `social-${index}`,
+                label: `Social Link ${index + 1}`,
+                url: link.trim(),
+            });
+        });
+        if (profile?.resume_url?.trim()) {
+            links.push({
+                id: 'resume',
+                label: profile?.resume_file_name?.trim() || 'Resume',
+                url: profile.resume_url.trim(),
+            });
+        }
+        return links;
+    }, [profile?.resume_file_name, profile?.resume_url, profile?.social_links]);
     const postsCount = stats.posts;
     const connectionsCount = stats.connections;
     const targetUserId = params.userId ?? null;
     const canMessage = !!targetUserId && targetUserId !== viewerId;
+
+    const openUrl = useCallback(async (rawUrl: string) => {
+        const finalUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+        const canOpen = await Linking.canOpenURL(finalUrl);
+        if (!canOpen) {
+            Alert.alert('Cannot open link', 'This link is not supported on this device.');
+            return;
+        }
+        await Linking.openURL(finalUrl);
+    }, []);
+
+    const openPortfolio = useCallback(() => {
+        if (portfolioLinks.length === 0) {
+            Alert.alert('No portfolio yet', 'This user has not added portfolio links or resume yet.');
+            return;
+        }
+        setPortfolioVisible(true);
+    }, [portfolioLinks.length]);
 
     return (
         <View style={styles.root}>
@@ -225,7 +410,7 @@ const UserProfileScreen = () => {
                                 <Ionicons name="chatbubble" size={16} color="#FFF" style={{ marginRight: 6 }} />
                                 <Text style={styles.primaryBtnText}>Message</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setComingSoon(true)} activeOpacity={0.8}>
+                            <TouchableOpacity style={styles.secondaryBtn} onPress={openPortfolio} activeOpacity={0.8}>
                                 <Ionicons name="briefcase-outline" size={16} color={DEEP} style={{ marginRight: 6 }} />
                                 <Text style={styles.secondaryBtnText}>Portfolio</Text>
                             </TouchableOpacity>
@@ -258,20 +443,20 @@ const UserProfileScreen = () => {
                     {/* Shared Content */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Shared Content</Text>
-                        <TouchableOpacity style={styles.linkRow} activeOpacity={0.6} onPress={() => setComingSoon(true)}>
+                        <TouchableOpacity style={styles.linkRow} activeOpacity={0.6} onPress={() => setSharedVisible(true)}>
                             <View style={[styles.linkIcon, { backgroundColor: '#EEF0FA' }]}><Ionicons name="images" size={20} color={ACCENT} /></View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.linkText}>Media, Links & Docs</Text>
-                                <Text style={styles.linkSub}>12 items shared</Text>
+                                <Text style={styles.linkSub}>{sharedItems.length} items shared</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
                         </TouchableOpacity>
                         <View style={styles.divider} />
-                        <TouchableOpacity style={styles.linkRow} activeOpacity={0.6} onPress={() => setComingSoon(true)}>
+                        <TouchableOpacity style={styles.linkRow} activeOpacity={0.6} onPress={() => setStarredVisible(true)}>
                             <View style={[styles.linkIcon, { backgroundColor: '#FFFBEB' }]}><Ionicons name="star" size={20} color="#EAB308" /></View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.linkText}>Starred Messages</Text>
-                                <Text style={styles.linkSub}>3 starred</Text>
+                                <Text style={styles.linkSub}>{starredItems.length} starred</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
                         </TouchableOpacity>
@@ -302,20 +487,95 @@ const UserProfileScreen = () => {
                 </Animated.View>
             </ScrollView>
 
-            {/* Custom Coming Soon Modal */}
-            <Modal transparent visible={comingSoon} animationType="fade" onRequestClose={() => setComingSoon(false)}>
-                <TouchableWithoutFeedback onPress={() => setComingSoon(false)}>
+            <Modal transparent visible={portfolioVisible} animationType="fade" onRequestClose={() => setPortfolioVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setPortfolioVisible(false)}>
                     <View style={styles.csOverlay}>
-                        <View style={styles.csCard}>
-                            <View style={styles.csIconWrap}>
-                                <Ionicons name="rocket-outline" size={32} color={ACCENT} />
+                        <TouchableWithoutFeedback>
+                            <View style={styles.liveSheet}>
+                                <Text style={styles.liveSheetTitle}>Portfolio</Text>
+                                {profileLoading ? (
+                                    <ActivityIndicator size="small" color={ACCENT} />
+                                ) : portfolioLinks.length === 0 ? (
+                                    <Text style={styles.liveEmptyText}>No portfolio links available.</Text>
+                                ) : (
+                                    portfolioLinks.map((item) => (
+                                        <TouchableOpacity key={item.id} style={styles.liveRow} activeOpacity={0.8} onPress={() => openUrl(item.url)}>
+                                            <View style={[styles.liveIconWrap, { backgroundColor: '#EEF2FF' }]}>
+                                                <Ionicons name="open-outline" size={16} color={ACCENT} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.liveRowTitle}>{item.label}</Text>
+                                                <Text style={styles.liveRowSub} numberOfLines={1}>{item.url}</Text>
+                                            </View>
+                                            <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                                        </TouchableOpacity>
+                                    ))
+                                )}
                             </View>
-                            <Text style={styles.csTitle}>Coming Soon</Text>
-                            <Text style={styles.csSub}>This feature will be available in the next update. Stay tuned!</Text>
-                            <TouchableOpacity style={styles.csBtn} onPress={() => setComingSoon(false)} activeOpacity={0.8}>
-                                <Text style={styles.csBtnText}>Got it</Text>
-                            </TouchableOpacity>
-                        </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal transparent visible={sharedVisible} animationType="fade" onRequestClose={() => setSharedVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setSharedVisible(false)}>
+                    <View style={styles.csOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.liveSheet}>
+                                <Text style={styles.liveSheetTitle}>Media, Links & Docs</Text>
+                                {sharedItems.length === 0 ? (
+                                    <Text style={styles.liveEmptyText}>No shared media, links, or docs found yet.</Text>
+                                ) : (
+                                    <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                                        {sharedItems.map((item) => (
+                                            <TouchableOpacity key={item.id} style={styles.liveRow} activeOpacity={0.8} onPress={() => openUrl(item.url)}>
+                                                <View style={[styles.liveIconWrap, { backgroundColor: item.type === 'doc' ? '#FFFBEB' : item.type === 'media' ? '#EEF0FA' : '#ECFDF5' }]}>
+                                                    <Ionicons
+                                                        name={item.type === 'doc' ? 'document-text-outline' : item.type === 'media' ? 'images-outline' : 'link-outline'}
+                                                        size={16}
+                                                        color={item.type === 'doc' ? '#D97706' : item.type === 'media' ? ACCENT : '#16A34A'}
+                                                    />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.liveRowTitle}>{item.label}</Text>
+                                                    <Text style={styles.liveRowSub} numberOfLines={1}>{item.url}</Text>
+                                                </View>
+                                                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                )}
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal transparent visible={starredVisible} animationType="fade" onRequestClose={() => setStarredVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setStarredVisible(false)}>
+                    <View style={styles.csOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.liveSheet}>
+                                <Text style={styles.liveSheetTitle}>Starred Messages</Text>
+                                {starredItems.length === 0 ? (
+                                    <Text style={styles.liveEmptyText}>No starred messages yet. Long-press a chat message and tap Star.</Text>
+                                ) : (
+                                    <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                                        {starredItems.map((item) => (
+                                            <View key={item.id} style={styles.liveRowStatic}>
+                                                <View style={[styles.liveIconWrap, { backgroundColor: '#FFF7D6' }]}>
+                                                    <Ionicons name="star" size={15} color="#EAB308" />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.liveRowTitle} numberOfLines={2}>{item.text}</Text>
+                                                    <Text style={styles.liveRowSub}>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</Text>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                )}
+                            </View>
+                        </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
@@ -416,14 +676,30 @@ const styles = StyleSheet.create({
     actText: { fontSize: 14, color: '#475569', lineHeight: 20, fontWeight: '500' },
     actBold: { fontWeight: '700', color: TEXT_DARK },
     actTime: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
-    // Coming Soon modal
+    // Live modal sheets
     csOverlay: { flex: 1, backgroundColor: 'rgba(15,12,40,0.75)', justifyContent: 'center', alignItems: 'center' },
-    csCard: { width: SW * 0.72, backgroundColor: '#FFF', borderRadius: 24, padding: 28, alignItems: 'center' },
-    csIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#EEF0FA', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-    csTitle: { fontSize: 20, fontWeight: '800', color: DEEP, marginBottom: 8 },
-    csSub: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center', lineHeight: 20, marginBottom: 20, fontWeight: '500' },
-    csBtn: { backgroundColor: ACCENT, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 14 },
-    csBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+    liveSheet: { width: SW * 0.82, maxWidth: 360, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 18 },
+    liveSheetTitle: { fontSize: 18, fontWeight: '800', color: DEEP, marginBottom: 12 },
+    liveEmptyText: { color: TEXT_MUTED, fontSize: 14, lineHeight: 20, textAlign: 'center', paddingVertical: 14 },
+    liveRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#EEF2F7',
+    },
+    liveRowStatic: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 10,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#EEF2F7',
+    },
+    liveIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    liveRowTitle: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+    liveRowSub: { marginTop: 2, color: '#64748B', fontSize: 11 },
 });
 
 export default UserProfileScreen;

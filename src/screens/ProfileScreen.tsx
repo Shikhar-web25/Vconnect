@@ -7,7 +7,6 @@ import {
   Linking,
   Modal,
   NativeModules,
-  PanResponder,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -152,6 +151,8 @@ const normalizeCloudinaryDeliveryType = (value?: string | null): CloudinaryDeliv
   return 'private';
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 export default function ProfileScreen() {
   const { theme, isDark, toggleMode } = useAppTheme();
   const navigation = useNavigation<any>();
@@ -174,6 +175,10 @@ export default function ProfileScreen() {
   const [draftBio, setDraftBio] = useState('');
   const [draftBranch, setDraftBranch] = useState('');
   const [draftYear, setDraftYear] = useState('');
+  const [yearPickerVisible, setYearPickerVisible] = useState(false);
+  const [pickerDay, setPickerDay] = useState(1);
+  const [pickerMonth, setPickerMonth] = useState(0);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [draftAvatarUrl, setDraftAvatarUrl] = useState('');
   const [draftSkills, setDraftSkills] = useState('');
   const [draftSocialLinks, setDraftSocialLinks] = useState('');
@@ -187,6 +192,8 @@ export default function ProfileScreen() {
   const [statsModalTitle, setStatsModalTitle] = useState<'Posts' | 'Replies' | 'Saved'>('Posts');
   const [statsModalLoading, setStatsModalLoading] = useState(false);
   const [statsModalItems, setStatsModalItems] = useState<StatItem[]>([]);
+  const adminTapCountRef = useRef(0);
+  const adminTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skeletonPulse = useRef(new Animated.Value(0.4)).current;
   const themeToggleAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
 
@@ -217,7 +224,30 @@ export default function ProfileScreen() {
     }).start();
   }, [isDark, themeToggleAnim]);
 
+  useEffect(() => {
+    return () => {
+      if (adminTapTimerRef.current) {
+        clearTimeout(adminTapTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const maxDay = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+    if (pickerDay > maxDay) {
+      setPickerDay(maxDay);
+    }
+  }, [pickerDay, pickerMonth, pickerYear]);
+
   const hasColumn = (column: string) => profileColumns.includes(column);
+  const yearPickerYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 16 }, (_, idx) => currentYear - idx);
+  }, []);
+  const yearPickerDays = useMemo(
+    () => Array.from({ length: new Date(pickerYear, pickerMonth + 1, 0).getDate() }, (_, idx) => idx + 1),
+    [pickerMonth, pickerYear],
+  );
 
   const alertMissingColumns = (columns: string[]) => {
     Alert.alert(
@@ -485,6 +515,7 @@ export default function ProfileScreen() {
   const handleSaveProfile = async () => {
     if (!profile || savingSection) return;
 
+    const nextDisplayName = draftName.trim() || null;
     const trimmedYear = draftYear.trim();
     const parsedYear = trimmedYear ? Number(trimmedYear) : null;
     if (
@@ -497,11 +528,19 @@ export default function ProfileScreen() {
     const nextYear = parsedYear;
 
     const updates: Record<string, string | number | null> = {};
-    if (hasColumn('full_name')) updates.full_name = draftName.trim() || null;
+    if (hasColumn('full_name')) {
+      updates.full_name = nextDisplayName;
+    } else if (hasColumn('username')) {
+      updates.username = nextDisplayName;
+    }
     if (hasColumn('bio')) updates.bio = draftBio.trim() || null;
     if (hasColumn('branch')) updates.branch = draftBranch.trim() || null;
     if (hasColumn('year_of_study')) updates.year_of_study = nextYear;
     if (hasColumn('avatar_url')) updates.avatar_url = draftAvatarUrl.trim() || null;
+    if (Object.keys(updates).length === 0) {
+      alertMissingColumns(['full_name or username', 'bio', 'branch', 'year_of_study', 'avatar_url']);
+      return;
+    }
 
     setSavingSection('profile');
     const { error } = await supabase.from('profiles').update(updates).eq('id', profile.id);
@@ -512,8 +551,41 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (nextDisplayName) {
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: {
+          full_name: nextDisplayName,
+          name: nextDisplayName,
+        },
+      });
+      if (metadataError) {
+        console.warn('Profile metadata sync warning:', metadataError.message);
+      }
+    }
+
     setProfile((current) => (current ? { ...current, ...updates } : current));
+    await loadProfile(false);
     setProfileModalVisible(false);
+  };
+
+  const openYearPicker = () => {
+    const currentYear = new Date().getFullYear();
+    const parsedStudyYear = Number(draftYear);
+    const derivedAdmissionYear =
+      Number.isFinite(parsedStudyYear) && parsedStudyYear >= 1 && parsedStudyYear <= 6
+        ? currentYear - parsedStudyYear + 1
+        : currentYear;
+    setPickerYear(derivedAdmissionYear);
+    setPickerMonth(new Date().getMonth());
+    setPickerDay(new Date().getDate());
+    setYearPickerVisible(true);
+  };
+
+  const confirmYearPicker = () => {
+    const currentYear = new Date().getFullYear();
+    const computedYearOfStudy = Math.max(1, Math.min(6, currentYear - pickerYear + 1));
+    setDraftYear(String(computedYearOfStudy));
+    setYearPickerVisible(false);
   };
 
   const handleSaveSkills = async () => {
@@ -790,25 +862,26 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleSecretSwipeDown = () => {
-    if (isAdminEmail(sessionEmail ?? profile?.email)) {
+  const handleAdminTap = useCallback(() => {
+    if (!isAdminEmail(sessionEmail ?? profile?.email)) return;
+
+    adminTapCountRef.current += 1;
+    if (adminTapTimerRef.current) {
+      clearTimeout(adminTapTimerRef.current);
+    }
+    adminTapTimerRef.current = setTimeout(() => {
+      adminTapCountRef.current = 0;
+    }, 1400);
+
+    if (adminTapCountRef.current >= 5) {
+      adminTapCountRef.current = 0;
+      if (adminTapTimerRef.current) {
+        clearTimeout(adminTapTimerRef.current);
+        adminTapTimerRef.current = null;
+      }
       navigation.navigate('AdminDashboard');
     }
-  };
-
-  const avatarSwipeResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          Math.abs(gestureState.dy) > 12 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dy > 72 && gestureState.vy > 0.12) {
-            handleSecretSwipeDown();
-          }
-        },
-      }),
-    [sessionEmail, profile?.email],
-  );
+  }, [navigation, profile?.email, sessionEmail]);
 
   const displayName = profile?.full_name ?? profile?.username ?? 'Student';
   const subtitle = [profile?.branch, formatYearLabel(profile?.year_of_study)].filter(Boolean).join(' • ');
@@ -876,7 +949,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileHeroCard}>
-            <View style={styles.avatarWrap} {...avatarSwipeResponder.panHandlers}>
+            <TouchableOpacity style={styles.avatarWrap} activeOpacity={0.9} onPress={handleAdminTap}>
               {profile?.avatar_url ? (
                 <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
               ) : (
@@ -887,7 +960,7 @@ export default function ProfileScreen() {
               <View style={styles.avatarBadge}>
                 <MaterialCommunityIcons name="shield-check" size={16} color="#0F766E" />
               </View>
-            </View>
+            </TouchableOpacity>
 
             <Text style={styles.displayName}>{displayName}</Text>
             <Text style={styles.subtitle}>{subtitle || 'Set your branch and year to complete this profile.'}</Text>
@@ -1221,7 +1294,16 @@ export default function ProfileScreen() {
             <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftName} onChangeText={setDraftName} placeholder="Full name" placeholderTextColor={theme.textMuted} />
             <TextInput style={[styles.input, styles.multilineInput, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftBio} onChangeText={setDraftBio} placeholder="Bio" placeholderTextColor={theme.textMuted} multiline />
             <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftBranch} onChangeText={setDraftBranch} placeholder="Branch" placeholderTextColor={theme.textMuted} />
-            <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftYear} onChangeText={setDraftYear} placeholder="Year of study" placeholderTextColor={theme.textMuted} keyboardType="number-pad" />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={openYearPicker}
+              style={[styles.input, styles.yearPickerField, { borderColor: theme.border, backgroundColor: theme.surfaceSoft }]}
+            >
+              <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.primary} />
+              <Text style={[styles.yearPickerText, { color: draftYear ? theme.text : theme.textMuted }]}>
+                {draftYear ? `Year of study: ${draftYear}` : 'Select admission date (auto-compute year of study)'}
+              </Text>
+            </TouchableOpacity>
             <TextInput style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surfaceSoft, color: theme.text }]} value={draftAvatarUrl} onChangeText={setDraftAvatarUrl} placeholder="Avatar URL" placeholderTextColor={theme.textMuted} autoCapitalize="none" />
             <TouchableOpacity
               style={[styles.uploadButton, { backgroundColor: theme.primary }]}
@@ -1245,6 +1327,87 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]} onPress={handleSaveProfile}>
                 <Text style={styles.modalButtonPrimaryText}>{savingSection === 'profile' ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={yearPickerVisible} transparent animationType="fade" onRequestClose={() => setYearPickerVisible(false)}>
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.modalBackdrop }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Select Admission Date</Text>
+            <Text style={[styles.modalHint, { color: theme.textMuted }]}>
+              Pick month, date, and year. We will compute your current year of study automatically.
+            </Text>
+            <View style={styles.calendarColumns}>
+              <ScrollView style={styles.calendarColumn} showsVerticalScrollIndicator={false}>
+                {MONTH_NAMES.map((month, idx) => (
+                  <TouchableOpacity
+                    key={month}
+                    style={[
+                      styles.calendarChip,
+                      pickerMonth === idx && { backgroundColor: theme.primary },
+                    ]}
+                    onPress={() => setPickerMonth(idx)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.calendarChipText, { color: pickerMonth === idx ? '#FFFFFF' : theme.text }]}>
+                      {month}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView style={styles.calendarColumn} showsVerticalScrollIndicator={false}>
+                {yearPickerDays.map((day) => (
+                  <TouchableOpacity
+                    key={`day-${day}`}
+                    style={[
+                      styles.calendarChip,
+                      pickerDay === day && { backgroundColor: theme.primary },
+                    ]}
+                    onPress={() => setPickerDay(day)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.calendarChipText, { color: pickerDay === day ? '#FFFFFF' : theme.text }]}>
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView style={styles.calendarColumn} showsVerticalScrollIndicator={false}>
+                {yearPickerYears.map((year) => (
+                  <TouchableOpacity
+                    key={`year-${year}`}
+                    style={[
+                      styles.calendarChip,
+                      pickerYear === year && { backgroundColor: theme.primary },
+                    ]}
+                    onPress={() => setPickerYear(year)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.calendarChipText, { color: pickerYear === year ? '#FFFFFF' : theme.text }]}>
+                      {year}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            <Text style={[styles.calendarSummary, { color: theme.textMuted }]}>
+              Selected: {pickerDay} {MONTH_NAMES[pickerMonth]} {pickerYear} • Year of study: {Math.max(1, Math.min(6, new Date().getFullYear() - pickerYear + 1))}
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonMuted, { backgroundColor: theme.surfaceSoft }]}
+                onPress={() => setYearPickerVisible(false)}
+              >
+                <Text style={[styles.modalButtonMutedText, { color: theme.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: theme.primary }]}
+                onPress={confirmYearPicker}
+              >
+                <Text style={styles.modalButtonPrimaryText}>Use This</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1485,6 +1648,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   input: { borderRadius: 16, borderWidth: 1, borderColor: '#D7E1EA', backgroundColor: '#F8FAFC', paddingHorizontal: 14, paddingVertical: 13, fontSize: 14, color: '#0F172A', marginBottom: 12 },
+  yearPickerField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  yearPickerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  calendarColumns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  calendarColumn: {
+    flex: 1,
+    maxHeight: 220,
+  },
+  calendarChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D7E1EA',
+    paddingVertical: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  calendarChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  calendarSummary: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
   multilineInput: { minHeight: 88, textAlignVertical: 'top' },
   largeMultilineInput: { minHeight: 160, textAlignVertical: 'top' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 6 },

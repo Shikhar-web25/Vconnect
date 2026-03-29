@@ -40,7 +40,7 @@ const AuthNavigator = ({ isAuthenticated = false }: { isAuthenticated?: boolean 
   return (
     <Stack.Navigator
       key={isAuthenticated ? 'auth-stack' : 'guest-stack'}
-      initialRouteName={isAuthenticated ? 'Main' : 'Splash'}
+      initialRouteName={isAuthenticated ? 'Main' : 'Login'}
       screenOptions={{
         headerShown: false,
         gestureEnabled: true,

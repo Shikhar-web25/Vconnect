@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Alert,
     View,
     StyleSheet,
     FlatList,
@@ -189,9 +190,27 @@ const HomeScreen = () => {
         } = await supabase.auth.getUser();
         if (!user) return;
 
+        const selectVariants = [
+            'id, full_name, username, avatar_url, branch, year_of_study',
+            'id, full_name, username, avatar_url',
+        ];
+
+        for (const selectValue of selectVariants) {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select(selectValue)
+                .eq('id', user.id)
+                .single();
+            if (!error && data && typeof data === 'object' && 'id' in data) {
+                setCurrentUser(data as CurrentUser);
+                await loadSavedPosts(user.id);
+                return;
+            }
+        }
+
         const email = (user.email ?? '').toLowerCase();
         const metadata = user.user_metadata ?? {};
-        const upsertCandidates = [
+        const insertCandidates = [
             {
                 id: user.id,
                 email: email || null,
@@ -215,15 +234,11 @@ const HomeScreen = () => {
             },
         ];
 
-        for (const payload of upsertCandidates) {
-            const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
-            if (!error) break;
+        for (const payload of insertCandidates) {
+            const { error } = await supabase.from('profiles').insert(payload);
+            const isDuplicate = `${error?.message ?? ''}`.toLowerCase().includes('duplicate');
+            if (!error || isDuplicate) break;
         }
-
-        const selectVariants = [
-            'id, full_name, username, avatar_url, branch, year_of_study',
-            'id, full_name, username, avatar_url',
-        ];
 
         for (const selectValue of selectVariants) {
             const { data, error } = await supabase
@@ -238,7 +253,15 @@ const HomeScreen = () => {
             }
         }
 
-        setCurrentUser({ id: user.id });
+        setCurrentUser({
+            id: user.id,
+            full_name: (metadata.full_name as string | undefined) ?? (metadata.name as string | undefined) ?? null,
+            username: normalizeUsernameFromEmail(user.email) ?? null,
+            avatar_url:
+                (metadata.avatar_url as string | undefined) ??
+                (metadata.picture as string | undefined) ??
+                null,
+        });
         await loadSavedPosts(user.id);
     }, [loadSavedPosts]);
 
@@ -289,6 +312,31 @@ const HomeScreen = () => {
             supabase.removeChannel(channel);
         };
     }, [loadPosts]);
+
+    useEffect(() => {
+        if (!currentUser?.id) return;
+        const preferredName = currentUser.full_name ?? currentUser.username ?? null;
+        const preferredAvatar = currentUser.avatar_url ?? null;
+        const preferredBatch = currentUser.year_of_study ? String(currentUser.year_of_study) : null;
+
+        setPosts((prev) =>
+            prev.map((post) => {
+                if (post.userId !== currentUser.id) return post;
+                return {
+                    ...post,
+                    userName: preferredName ?? post.userName,
+                    userAvatar: { uri: preferredAvatar ?? post.userAvatar.uri },
+                    batch: preferredBatch ?? post.batch,
+                };
+            }),
+        );
+    }, [
+        currentUser?.id,
+        currentUser?.full_name,
+        currentUser?.username,
+        currentUser?.avatar_url,
+        currentUser?.year_of_study,
+    ]);
 
     const loadComments = async (postId: string) => {
         let rows: any[] | null = null;
@@ -369,6 +417,7 @@ const HomeScreen = () => {
 
         if (insertError) {
             setErrorMessage(insertError?.message ?? 'Could not add comment.');
+            Alert.alert('Comment failed', insertError?.message ?? 'Could not add comment.');
             return null;
         }
 

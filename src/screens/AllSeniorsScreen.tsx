@@ -1,691 +1,326 @@
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  RefreshControl,
+  StatusBar,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  Image,
-  StatusBar,
-  Animated,
-  Dimensions,
-  Platform,
-  FlatList,
-  Modal,
-  Pressable,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { supabase } from '../../supabaseClient';
+import { getMaleAvatar } from '../utils/avatar';
+import { useAppTheme } from '../theme/AppThemeContext';
 
-const { width } = Dimensions.get('window');
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Mentor {
+type RankedProfile = {
   id: string;
   name: string;
-  specialty: string;
-  avatar: string;
-  online?: 'green' | 'yellow' | null;
-  highlight?: boolean;
-  bio?: string;
-  experience?: string;
-  skills?: string;
-}
-
-// ─── Colors ───────────────────────────────────────────────────────────────────
-const COLORS = {
-  primary: '#4A6D8C',
-  background: '#f1f5f9',
-  card: '#ffffff',
-  textDark: '#1e293b',
-  textLight: '#94a3b8',
-  green: '#34d399',
-  yellow: '#fbbf24',
-  border: '#e2e8f0',
-  headerBg: '#4A6D8C',
-  tooltipBg: '#ffffff',
+  avatar: any;
+  postsCount: number;
+  likesTotal: number;
+  score: number;
 };
 
-const NUM_COLUMNS = 3;
-const CARD_WIDTH = (width - 40 - 16) / NUM_COLUMNS;
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const MENTORS: Mentor[] = [
-  {
-    id: '1',
-    name: 'Marcus C.',
-    specialty: 'Full Stack',
-    avatar: 'https://randomuser.me/api/portraits/men/75.jpg',
-    online: null,
-    experience: '8 yrs @ Stripe',
-    skills: 'React & Node.js',
-    bio: '8 years building full-stack apps. Expert in React, Node.js, and cloud architecture. Helped 50+ engineers land senior roles.',
-  },
-  {
-    id: '2',
-    name: 'Lisa K.',
-    specialty: 'Product',
-    avatar: 'https://randomuser.me/api/portraits/women/65.jpg',
-    online: 'yellow',
-    experience: '6 yrs @ Notion',
-    skills: 'Roadmap Strategy',
-    bio: 'Product lead at two unicorn startups. Specializes in 0-to-1 products, user research, and roadmap strategy.',
-  },
-  {
-    id: '3',
-    name: 'James L.',
-    specialty: 'Marketing',
-    avatar: 'https://randomuser.me/api/portraits/men/46.jpg',
-    highlight: true,
-    online: null,
-    experience: '10 yrs @ HubSpot',
-    skills: 'SEO & Paid Ads',
-    bio: 'Growth marketing veteran with experience scaling B2B and B2C brands. Deep expertise in SEO, paid ads, and brand storytelling.',
-  },
-  {
-    id: '4',
-    name: 'Elena R.',
-    specialty: 'HR Consult',
-    avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
-    online: null,
-    experience: '12 yrs @ Deloitte',
-    skills: 'Career Transitions',
-    bio: 'Former HR director at Fortune 500 companies. Guides professionals on interviews, negotiations, and career transitions.',
-  },
-  {
-    id: '5',
-    name: 'Chris P.',
-    specialty: 'Mobile Dev',
-    avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-    online: null,
-    experience: '6 yrs @ Airbnb',
-    skills: 'React Native & Swift',
-    bio: 'iOS & Android developer with 6 years shipping consumer apps. Specializes in React Native, Swift, and app store optimization.',
-  },
-  {
-    id: '6',
-    name: 'Nina J.',
-    specialty: 'DevOps',
-    avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-    online: 'green',
-    experience: '7 yrs @ AWS',
-    skills: 'K8s & CI/CD',
-    bio: 'DevOps engineer specializing in Kubernetes, CI/CD pipelines, and cloud infrastructure. Currently available for mentoring sessions.',
-  },
-  {
-    id: '7',
-    name: 'Vikram S.',
-    specialty: 'AI Ethics',
-    avatar: 'https://randomuser.me/api/portraits/men/52.jpg',
-    online: null,
-    experience: '9 yrs @ DeepMind',
-    skills: 'Bias & Fairness',
-    bio: 'Researcher in AI ethics and responsible ML. Advises companies on bias auditing, fairness frameworks, and ethical AI deployment.',
-  },
-  {
-    id: '8',
-    name: 'Maya T.',
-    specialty: 'Career Coach',
-    avatar: 'https://randomuser.me/api/portraits/women/26.jpg',
-    online: 'green',
-    experience: '8 yrs @ LinkedIn',
-    skills: 'Interview Prep',
-    bio: 'Career coach with 200+ success stories. Focuses on resume building, interview prep, and navigating tech career pivots.',
-  },
-  {
-    id: '9',
-    name: 'Omar D.',
-    specialty: 'Frontend',
-    avatar: 'https://randomuser.me/api/portraits/men/67.jpg',
-    online: null,
-    experience: '5 yrs @ Figma',
-    skills: 'React & Design Sys',
-    bio: 'Frontend specialist with a passion for pixel-perfect UI. Expert in React, animations, and design systems used at scale.',
-  },
-  {
-    id: '10',
-    name: 'Chloe S.',
-    specialty: 'Product',
-    avatar: 'https://randomuser.me/api/portraits/women/33.jpg',
-    online: null,
-    experience: '7 yrs @ Spotify',
-    skills: 'UX Research',
-    bio: 'Product strategist with a background in UX research. Mentors aspiring PMs on frameworks, metrics, and stakeholder management.',
-  },
-  {
-    id: '11',
-    name: 'Dr. Alex R.',
-    specialty: 'Data Science',
-    avatar: 'https://randomuser.me/api/portraits/men/43.jpg',
-    online: 'green',
-    experience: '10+ yrs @ Google',
-    skills: 'ML & Analytics',
-    bio: 'Lead data scientist at Google. Expert in machine learning, statistical modeling, and data-driven product decisions.',
-  },
-  {
-    id: '12',
-    name: 'Sarah W.',
-    specialty: 'UX Design',
-    avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-    online: 'yellow',
-    experience: '8 yrs @ Apple',
-    skills: 'Figma & Prototyping',
-    bio: 'Senior UX designer at Apple. Passionate about accessible, intuitive design and mentoring early-career designers.',
-  },
-  {
-    id: '13',
-    name: 'Raj M.',
-    specialty: 'Backend',
-    avatar: 'https://randomuser.me/api/portraits/men/88.jpg',
-    online: null,
-    experience: '9 yrs @ Netflix',
-    skills: 'Java & Microservices',
-    bio: 'Backend engineer with deep expertise in distributed systems, microservices, and high-throughput APIs at Netflix scale.',
-  },
-  {
-    id: '14',
-    name: 'Priya N.',
-    specialty: 'Blockchain',
-    avatar: 'https://randomuser.me/api/portraits/women/57.jpg',
-    online: null,
-    experience: '6 yrs @ Coinbase',
-    skills: 'Solidity & Web3',
-    bio: 'Blockchain developer at Coinbase. Guides developers into Web3, smart contracts, and decentralized finance.',
-  },
-  {
-    id: '15',
-    name: 'Tom B.',
-    specialty: 'Security',
-    avatar: 'https://randomuser.me/api/portraits/men/22.jpg',
-    online: 'green',
-    experience: '11 yrs @ Cloudflare',
-    skills: 'Pen Testing & OWASP',
-    bio: 'Cybersecurity expert with 11 years in ethical hacking, secure architecture, and compliance at major tech firms.',
-  },
+const PROFILE_SELECT_VARIANTS = [
+  'id, full_name, username, avatar_url',
+  'id, username, avatar_url',
+  'id, full_name, avatar_url',
+  'id, avatar_url',
 ];
 
-// ─── Rich Tooltip ─────────────────────────────────────────────────────────────
-interface TooltipProps {
-  visible: boolean;
-  mentor: Mentor | null;
-  onClose: () => void;
-  position: { x: number; y: number; cardWidth: number };
-}
-
-const RichTooltip = ({ visible, mentor, onClose, position }: TooltipProps) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.88)).current;
-
-  React.useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 4 }),
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 4 }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.88, duration: 140, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [visible]);
-
-  if (!visible || !mentor) return null;
-
-  const tooltipWidth = 200;
-  let left = position.x + position.cardWidth / 2 - tooltipWidth / 2;
-  left = Math.max(12, Math.min(left, width - tooltipWidth - 12));
-  const arrowLeft = position.x + position.cardWidth / 2 - left - 8;
-
-  return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <Pressable style={tooltipStyles.overlay} onPress={onClose}>
-        <Animated.View
-          style={[
-            tooltipStyles.box,
-            {
-              top: position.y,
-              left,
-              width: tooltipWidth,
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
-          <View style={tooltipStyles.headerRow}>
-            <Image source={{ uri: mentor.avatar }} style={tooltipStyles.avatar} />
-            <View style={tooltipStyles.headerText}>
-              <Text style={tooltipStyles.name}>{mentor.name}</Text>
-              <Text style={tooltipStyles.specialty}>{mentor.specialty}</Text>
-            </View>
-          </View>
-
-          {mentor.experience && (
-            <View style={tooltipStyles.infoRow}>
-              <Text style={tooltipStyles.starIcon}>⭐</Text>
-              <Text style={tooltipStyles.infoText}>{mentor.experience}</Text>
-            </View>
-          )}
-
-          {mentor.skills && (
-            <View style={tooltipStyles.infoRow}>
-              <Text style={tooltipStyles.chartIcon}>📊</Text>
-              <Text style={[tooltipStyles.infoText, tooltipStyles.skillText]}>{mentor.skills}</Text>
-            </View>
-          )}
-
-          <View style={tooltipStyles.divider} />
-
-          <TouchableOpacity style={tooltipStyles.viewBtn} onPress={onClose}>
-            <Text style={tooltipStyles.viewBtnText}>View Profile</Text>
-          </TouchableOpacity>
-
-          <View style={[tooltipStyles.arrow, { left: arrowLeft }]} />
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
-};
-
-const tooltipStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.18)',
-  },
-  box: {
-    position: 'absolute',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 10,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: `${'#4A6D8C'}33`,
-  },
-  headerText: {
-    flex: 1,
-  },
-  name: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  specialty: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 1,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  starIcon: { fontSize: 13 },
-  chartIcon: { fontSize: 13 },
-  infoText: {
-    fontSize: 12,
-    color: '#1e293b',
-    fontWeight: '500',
-  },
-  skillText: {
-    color: '#4A6D8C',
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 10,
-  },
-  viewBtn: {
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#4A6D8C',
-    paddingVertical: 7,
-    alignItems: 'center',
-  },
-  viewBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#4A6D8C',
-  },
-  arrow: {
-    position: 'absolute',
-    bottom: -7,
-    width: 14,
-    height: 14,
-    backgroundColor: '#ffffff',
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#e2e8f0',
-    transform: [{ rotate: '45deg' }],
-  },
-});
-
-// ─── Mentor Card ──────────────────────────────────────────────────────────────
-interface MentorCardProps {
-  mentor: Mentor;
-  onLongPress: (mentor: Mentor, pos: { x: number; y: number; cardWidth: number }) => void;
-}
-
-const MentorCard = ({ mentor, onLongPress }: MentorCardProps) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const cardRef = useRef<View>(null);
-
-  const handleLongPress = () => {
-    if (!mentor.bio) return;
-    cardRef.current?.measureInWindow((x, y, cardWidth, cardHeight) => {
-      onLongPress(mentor, { x, y: y - 185, cardWidth });
-    });
-    Animated.sequence([
-      Animated.spring(scaleAnim, { toValue: 0.91, useNativeDriver: true, speed: 30 }),
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }),
-    ]).start();
-  };
-
-  return (
-    <Animated.View
-      ref={cardRef}
-      style={[
-        styles.mentorCard,
-        mentor.highlight && styles.mentorCardHighlight,
-        { transform: [{ scale: scaleAnim }] },
-      ]}
-    >
-      <TouchableOpacity
-        style={styles.mentorCardInner}
-        onPressIn={() =>
-          Animated.spring(scaleAnim, { toValue: 0.94, useNativeDriver: true }).start()
-        }
-        onPressOut={() =>
-          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start()
-        }
-        onLongPress={handleLongPress}
-        delayLongPress={350}
-        activeOpacity={1}
-      >
-        <View style={styles.avatarWrapper}>
-          <Image source={{ uri: mentor.avatar }} style={styles.mentorAvatar} />
-          {mentor.online && (
-            <View
-              style={[
-                styles.onlineDot,
-                { backgroundColor: mentor.online === 'green' ? COLORS.green : COLORS.yellow },
-              ]}
-            />
-          )}
-        </View>
-        <Text style={styles.mentorName} numberOfLines={1}>{mentor.name}</Text>
-        <Text style={styles.mentorSpecialty} numberOfLines={1}>{mentor.specialty}</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 const AllSeniorsScreen = () => {
-  const navigation = useNavigation();
+  const { theme, isDark } = useAppTheme();
+  const navigation = useNavigation<any>();
   const [searchQuery, setSearchQuery] = useState('');
-  const [tooltipMentor, setTooltipMentor] = useState<Mentor | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, cardWidth: 0 });
-  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [profiles, setProfiles] = useState<RankedProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleLongPress = (mentor: Mentor, pos: { x: number; y: number; cardWidth: number }) => {
-    setTooltipMentor(mentor);
-    setTooltipPos(pos);
-    setTooltipVisible(true);
-  };
+  const loadProfiles = useCallback(async (showLoader: boolean) => {
+    if (showLoader) {
+      setLoading(true);
+    }
 
-  const filteredMentors = MENTORS.filter(
-    m =>
-      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.specialty.toLowerCase().includes(searchQuery.toLowerCase()),
+    const { data: postRows, error: postError } = await supabase
+      .from('posts')
+      .select('user_id, likes_count');
+
+    if (postError || !postRows) {
+      setProfiles([]);
+      if (showLoader) {
+        setLoading(false);
+      }
+      return;
+    }
+
+    const statsMap = new Map<string, { postsCount: number; likesTotal: number; score: number }>();
+    postRows.forEach((row: any) => {
+      const userId = row?.user_id;
+      if (!userId) return;
+      const current = statsMap.get(userId) ?? { postsCount: 0, likesTotal: 0, score: 0 };
+      const likes = Number(row?.likes_count ?? 0);
+      current.postsCount += 1;
+      current.likesTotal += likes;
+      current.score = current.postsCount + current.likesTotal;
+      statsMap.set(userId, current);
+    });
+
+    let rankedIds = Array.from(statsMap.entries())
+      .sort((a, b) => b[1].score - a[1].score)
+      .map(([id]) => id);
+
+    if (rankedIds.length === 0) {
+      let fallbackProfiles: any[] | null = null;
+      for (const selectValue of PROFILE_SELECT_VARIANTS) {
+        const fallback = await supabase.from('profiles').select(selectValue).limit(100);
+        if (!fallback.error) {
+          fallbackProfiles = fallback.data as any[] | null;
+          break;
+        }
+      }
+
+      const mapped = (fallbackProfiles ?? []).map((profile: any, index: number) => ({
+        id: profile.id,
+        name: profile.full_name ?? profile.username ?? 'Student',
+        avatar: profile.avatar_url ? { uri: profile.avatar_url } : getMaleAvatar(index % 5),
+        postsCount: 0,
+        likesTotal: 0,
+        score: 0,
+      }));
+
+      setProfiles(mapped);
+      if (showLoader) {
+        setLoading(false);
+      }
+      return;
+    }
+
+    rankedIds = rankedIds.slice(0, 200);
+
+    let profileRows: any[] | null = null;
+    for (const selectValue of PROFILE_SELECT_VARIANTS) {
+      const profileResult = await supabase.from('profiles').select(selectValue).in('id', rankedIds);
+      if (!profileResult.error) {
+        profileRows = profileResult.data as any[] | null;
+        break;
+      }
+    }
+
+    const profileMap = new Map<string, any>((profileRows ?? []).map((row: any) => [row.id, row]));
+    const mapped: RankedProfile[] = rankedIds
+      .map((id, index) => {
+        const profile = profileMap.get(id);
+        if (!profile) return null;
+        const stats = statsMap.get(id) ?? { postsCount: 0, likesTotal: 0, score: 0 };
+        return {
+          id,
+          name: profile.full_name ?? profile.username ?? 'Student',
+          avatar: profile.avatar_url ? { uri: profile.avatar_url } : getMaleAvatar(index % 5),
+          postsCount: stats.postsCount,
+          likesTotal: stats.likesTotal,
+          score: stats.score,
+        };
+      })
+      .filter(Boolean) as RankedProfile[];
+
+    setProfiles(mapped);
+    if (showLoader) {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfiles(true);
+    }, [loadProfiles]),
   );
 
-  const paddedMentors = [...filteredMentors];
-  const remainder = paddedMentors.length % NUM_COLUMNS;
-  if (remainder !== 0) {
-    for (let i = 0; i < NUM_COLUMNS - remainder; i++) {
-      paddedMentors.push({ id: `empty-${i}`, name: '', specialty: '', avatar: '' });
-    }
-  }
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProfiles(false);
+    setRefreshing(false);
+  }, [loadProfiles]);
 
-  const renderMentor = ({ item }: { item: Mentor }) => {
-    if (!item.name) return <View style={styles.mentorCardPlaceholder} />;
-    return <MentorCard mentor={item} onLongPress={handleLongPress} />;
-  };
+  const filteredProfiles = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    if (!needle) return profiles;
+    return profiles.filter((profile) => profile.name.toLowerCase().includes(needle));
+  }, [profiles, searchQuery]);
 
-  const ListHeader = () => (
-    <>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>All Profiles</Text>
-        <Text style={styles.mentorCount}>{filteredMentors.length} available</Text>
+  const renderProfile = ({ item, index }: { item: RankedProfile; index: number }) => (
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      activeOpacity={0.9}
+      onPress={() =>
+        navigation.navigate('UserProfile', {
+          userId: item.id,
+          name: item.name,
+          avatar: item.avatar,
+        })
+      }
+    >
+      <Text style={[styles.rank, { color: theme.primary }]}>#{index + 1}</Text>
+      <Image source={item.avatar} style={styles.avatar} />
+      <View style={styles.textWrap}>
+        <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={[styles.meta, { color: theme.textMuted }]}>
+          {item.postsCount} posts • {item.likesTotal} likes
+        </Text>
       </View>
-      <Text style={styles.longPressHint}>Hold a card to see a quick bio</Text>
-    </>
+      <Icon name="chevron-right" size={20} color={theme.textMuted} />
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerBg} />
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+      <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <View style={[styles.header, { backgroundColor: theme.surface }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.surfaceSoft }]}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.86}
+          >
+            <Icon name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTextWrap}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Top Profiles</Text>
+            <Text style={[styles.headerSub, { color: theme.textMuted }]}>Live ranking from real posts + likes</Text>
+          </View>
+        </View>
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Top Profiles</Text>
-        <View style={[styles.headerIconBtn, { backgroundColor: 'transparent' }]} />
-      </View>
-
-      {/* ── Search Bar ── */}
-      <View style={styles.searchBarWrapper}>
-        <View style={styles.searchBar}>
-          <Icon name="search" size={18} color={COLORS.textLight} style={{ marginRight: 8 }} />
+        <View style={[styles.searchBox, { backgroundColor: theme.surfaceSoft, borderColor: theme.border }]}>
+          <Icon name="search" size={18} color={theme.textMuted} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Find your next guide..."
-            placeholderTextColor={COLORS.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Search profiles..."
+            placeholderTextColor={theme.textMuted}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Icon name="close" size={16} color={COLORS.textLight} />
+          {searchQuery.length > 0 ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.8}>
+              <Icon name="close" size={16} color={theme.textMuted} />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
-      </View>
 
-      {/* ── Grid ── */}
-      <FlatList
-        data={paddedMentors}
-        keyExtractor={item => item.id}
-        renderItem={renderMentor}
-        numColumns={NUM_COLUMNS}
-        ListHeaderComponent={ListHeader}
-        columnWrapperStyle={styles.mentorRow}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        style={styles.flatList}
-      />
-
-      {/* ── Rich Tooltip ── */}
-      <RichTooltip
-        visible={tooltipVisible}
-        mentor={tooltipMentor}
-        onClose={() => setTooltipVisible(false)}
-        position={tooltipPos}
-      />
-    </SafeAreaView>
+        {loading ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="large" color={theme.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={filteredProfiles}
+            keyExtractor={(item) => item.id}
+            renderItem={renderProfile}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Icon name="group" size={34} color={theme.textMuted} />
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>No profiles yet</Text>
+                <Text style={[styles.emptySub, { color: theme.textMuted }]}>
+                  Once users create posts, ranking will appear here.
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </SafeAreaView>
+    </View>
   );
 };
 
 export default AllSeniorsScreen;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.headerBg,
-  },
+  root: { flex: 1 },
+  safeArea: { flex: 1 },
   header: {
-    backgroundColor: COLORS.headerBg,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 16 : 12,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(148,163,184,0.25)',
   },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  searchBarWrapper: {
-    backgroundColor: COLORS.headerBg,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-  },
-  searchBar: {
+  headerTextWrap: { flex: 1 },
+  headerTitle: { fontSize: 19, fontWeight: '800' },
+  headerSub: { marginTop: 2, fontSize: 12, fontWeight: '500' },
+  searchBox: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 10,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 30,
-    height: 46,
-    paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+    paddingHorizontal: 12,
   },
   searchInput: {
     flex: 1,
+    marginLeft: 8,
     fontSize: 14,
-    color: COLORS.textDark,
-    padding: 0,
   },
-  flatList: {
+  loaderWrap: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 22,
+    gap: 9,
   },
-  sectionHeader: {
+  card: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textDark,
-    letterSpacing: 0.2,
-  },
-  mentorCount: {
-    fontSize: 13,
-    color: COLORS.textLight,
-  },
-  longPressHint: {
-    fontSize: 11,
-    color: COLORS.textLight,
-    textAlign: 'center',
-    marginBottom: 14,
-    fontStyle: 'italic',
-  },
-  mentorRow: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  mentorCard: {
-    width: CARD_WIDTH,
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  mentorCardHighlight: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(74,109,140,0.25)',
-  },
-  mentorCardPlaceholder: {
-    width: CARD_WIDTH,
-  },
-  mentorCardInner: {
-    padding: 12,
     alignItems: 'center',
   },
-  avatarWrapper: {
-    position: 'relative',
-    marginBottom: 8,
-  },
-  mentorAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    borderColor: `${'#4A6D8C'}22`,
-  },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: COLORS.card,
-  },
-  mentorName: {
+  rank: {
+    width: 34,
     fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textDark,
+    fontWeight: '800',
     textAlign: 'center',
   },
-  mentorSpecialty: {
-    fontSize: 10,
-    marginTop: 2,
-    textAlign: 'center',
-    fontWeight: '500',
-    color: COLORS.textLight,
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 10,
   },
+  textWrap: { flex: 1 },
+  name: { fontSize: 14, fontWeight: '800' },
+  meta: { marginTop: 2, fontSize: 12, fontWeight: '600' },
+  emptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 42,
+  },
+  emptyTitle: { marginTop: 10, fontSize: 16, fontWeight: '800' },
+  emptySub: { marginTop: 4, fontSize: 12, textAlign: 'center' },
 });
